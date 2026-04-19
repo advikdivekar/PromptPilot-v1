@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from google import genai
@@ -7,17 +7,54 @@ from google.genai import types
 import base64
 import os
 import re
-from typing import Optional
+import hashlib
+import asyncio
+from typing import Optional, Dict, Set
 
 app = FastAPI(title="PromptPilot API")
 
-# Allow requests from VS Code extension and browser extension
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ── WebSocket channel manager ─────────────────────────────────────────────────
+
+class ChannelManager:
+    def __init__(self):
+        # channel_id -> set of connected WebSocket clients
+        self.channels: Dict[str, Set[WebSocket]] = {}
+
+    async def connect(self, channel_id: str, websocket: WebSocket):
+        await websocket.accept()
+        if channel_id not in self.channels:
+            self.channels[channel_id] = set()
+        self.channels[channel_id].add(websocket)
+        print(f"Client connected to channel {channel_id[:8]}... Total: {len(self.channels[channel_id])}")
+
+    def disconnect(self, channel_id: str, websocket: WebSocket):
+        if channel_id in self.channels:
+            self.channels[channel_id].discard(websocket)
+            if not self.channels[channel_id]:
+                del self.channels[channel_id]
+        print(f"Client disconnected from channel {channel_id[:8]}...")
+
+    async def broadcast(self, channel_id: str, message: dict):
+        if channel_id not in self.channels:
+            return False
+        disconnected = set()
+        for websocket in self.channels[channel_id]:
+            try:
+                await websocket.send_json(message)
+            except Exception:
+                disconnected.add(websocket)
+        for ws in disconnected:
+            self.channels[channel_id].discard(ws)
+        return True
+
+manager = ChannelManager()
 
 MODELS = [
     "gemini-2.0-flash",
@@ -41,7 +78,6 @@ You will be given:
 - The project structure
 - Relevant config files
 - The file the developer is currently working on
-- Semantically relevant code chunks retrieved from the codebase
 - Relevant history of previous prompts and refined outputs for this file
 - Any images, documents, or files the developer has attached for context
 
@@ -110,7 +146,7 @@ Return only one word: coding, project, or general.
 class Attachment(BaseModel):
     name: str
     mimeType: str
-    data: str  # base64 encoded
+    data: str
 
 class EngineerRequest(BaseModel):
     user_prompt: str
@@ -118,16 +154,15 @@ class EngineerRequest(BaseModel):
     context: Optional[str] = ""
     history: Optional[str] = ""
     attachments: Optional[list[Attachment]] = []
-    prompt_type: Optional[str] = None  # if None, server classifies
+    prompt_type: Optional[str] = None
 
-class PingResponse(BaseModel):
-    status: str
-    version: str
+class SendToChannelRequest(BaseModel):
+    channel_id: str
+    prompt: str
 
 # ── Core Logic ────────────────────────────────────────────────────────────────
 
-def classify_prompt(user_input: str, client: genai.Client) -> str:
-    """Classifies the prompt type to determine context strategy."""
+def classify_prompt(user_input: str, client) -> str:
     for model in MODELS:
         try:
             response = client.models.generate_content(
@@ -144,17 +179,8 @@ def classify_prompt(user_input: str, client: genai.Client) -> str:
     return "coding"
 
 
-def call_gemini_api(
-    model_name: str,
-    user_input: str,
-    context: str,
-    attachments: list,
-    system_prompt: str,
-    client: genai.Client
-) -> str:
-    """Makes a single call to the Gemini API."""
+def call_gemini_api(model_name, user_input, context, attachments, system_prompt, client):
     full_input = f"{context}\n\n--- User Instruction ---\n{user_input}" if context.strip() else user_input
-
     content_parts = [full_input]
 
     for attachment in attachments:
@@ -178,17 +204,7 @@ def call_gemini_api(
     return response.text
 
 
-def rewrite_prompt_logic(
-    user_input: str,
-    context: str,
-    attachments: list,
-    client: genai.Client,
-    prompt_type: str = None
-) -> tuple[str, str]:
-    """
-    Classifies and rewrites the prompt.
-    Returns (refined_prompt, prompt_type)
-    """
+def rewrite_prompt_logic(user_input, context, attachments, client, prompt_type=None):
     if not prompt_type:
         prompt_type = classify_prompt(user_input, client)
 
@@ -206,14 +222,11 @@ def rewrite_prompt_logic(
 
     for model in MODELS:
         try:
-            refined = call_gemini_api(
-                model, user_input, active_context, attachments, system, client
-            )
+            refined = call_gemini_api(model, user_input, active_context, attachments, system, client)
             return refined, prompt_type
         except errors.ClientError as e:
             last_error = e
-            reason = "Quota exceeded" if "RESOURCE_EXHAUSTED" in str(e) else str(e)
-            print(f"Model {model} failed ({reason})")
+            print(f"Model {model} failed: {e}")
             continue
         except Exception as e:
             if any(code in str(e) for code in RECOVERABLE_ERROR_CODES):
@@ -223,40 +236,30 @@ def rewrite_prompt_logic(
 
     raise Exception(f"All models failed. Last error: {last_error}")
 
-
 # ── API Routes ────────────────────────────────────────────────────────────────
 
-@app.get("/", response_model=PingResponse)
-def ping():
-    """Health check endpoint."""
+@app.get("/")
+def root():
     return {"status": "ok", "version": "1.0.0"}
 
 
 @app.get("/health")
 def health():
-    """Health check for Render."""
     return {"status": "healthy"}
 
 
 @app.post("/engineer")
 async def engineer_prompt(request: EngineerRequest):
-    """
-    Main endpoint — takes a rough prompt and returns an engineered one.
-    The user's Gemini API key is used directly and never stored.
-    """
     if not request.user_prompt.strip():
         raise HTTPException(status_code=400, detail="user_prompt cannot be empty")
-
     if not request.api_key.strip():
         raise HTTPException(status_code=400, detail="api_key cannot be empty")
 
-    # Create a client using the USER's API key — never stored server side
     try:
         client = genai.Client(api_key=request.api_key)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid API key: {e}")
 
-    # Build full context from what the extension sends
     context_parts = []
     if request.history:
         context_parts.append(f"--- Relevant Session History ---\n{request.history}")
@@ -280,3 +283,45 @@ async def engineer_prompt(request: EngineerRequest):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/channel/{api_key}")
+def get_channel_id(api_key: str):
+    """
+    Returns a unique channel ID derived from the user's API key.
+    The channel ID is a hash — the original API key is never stored.
+    """
+    channel_id = hashlib.sha256(api_key.encode()).hexdigest()
+    return {"channel_id": channel_id}
+
+
+@app.websocket("/ws/{channel_id}")
+async def websocket_endpoint(websocket: WebSocket, channel_id: str):
+    """
+    WebSocket endpoint for browser extension communication.
+    Each user has their own private channel identified by channel_id.
+    """
+    await manager.connect(channel_id, websocket)
+    try:
+        while True:
+            # Keep connection alive and handle incoming messages
+            data = await websocket.receive_text()
+            # Echo back to confirm receipt
+            await websocket.send_json({"type": "ack"})
+    except WebSocketDisconnect:
+        manager.disconnect(channel_id, websocket)
+
+
+@app.post("/send")
+async def send_to_channel(request: SendToChannelRequest):
+    """
+    Sends a prompt to all browser extension clients connected to a channel.
+    Called by the VS Code extension when user clicks Send to Agent.
+    """
+    success = await manager.broadcast(
+        request.channel_id,
+        {"type": "prompt", "prompt": request.prompt}
+    )
+    if not success:
+        return {"status": "no_clients", "message": "No browser extension connected to this channel"}
+    return {"status": "sent"}

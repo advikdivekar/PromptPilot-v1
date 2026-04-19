@@ -1,18 +1,36 @@
 let socket = null;
 let reconnectTimeout = null;
+let channelId = null;
+
+// Get channel ID from storage
+chrome.storage.local.get(['channelId'], (result) => {
+    if (result.channelId) {
+        channelId = result.channelId;
+        connect();
+    }
+});
+
+// Listen for channel ID being set
+chrome.runtime.onMessage.addListener((message) => {
+    if (message.type === 'setChannelId') {
+        channelId = message.channelId;
+        chrome.storage.local.set({ channelId });
+        connect();
+    }
+    if (message.type === 'getStatus') {
+        return { connected: socket && socket.readyState === WebSocket.OPEN };
+    }
+});
 
 function connect() {
-    if (socket && socket.readyState === WebSocket.OPEN) {
-        return;
-    }
+    if (!channelId) return;
+    if (socket && socket.readyState === WebSocket.OPEN) return;
 
     try {
-        socket = new WebSocket('ws://localhost:54321');
+        socket = new WebSocket(`wss://promptpilot-api.onrender.com/ws/${channelId}`);
 
         socket.onopen = () => {
-            console.log('PromptPilot: Connected to WebSocket server');
-            // Register as a browser extension client
-            socket.send(JSON.stringify({ type: 'register' }));
+            console.log('PromptPilot: Connected to hosted server');
             if (reconnectTimeout) {
                 clearTimeout(reconnectTimeout);
                 reconnectTimeout = null;
@@ -22,13 +40,7 @@ function connect() {
         socket.onmessage = (event) => {
             try {
                 const data = JSON.parse(event.data);
-
-                if (data.type === 'registered') {
-                    console.log('PromptPilot: Successfully registered with server');
-                }
-
                 if (data.type === 'prompt') {
-                    // Forward the prompt to the active tab
                     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
                         if (tabs[0]) {
                             chrome.tabs.sendMessage(tabs[0].id, {
@@ -36,9 +48,7 @@ function connect() {
                                 prompt: data.prompt
                             }, (response) => {
                                 if (chrome.runtime.lastError) {
-                                    console.log('PromptPilot: Could not reach content script:', chrome.runtime.lastError.message);
-                                } else {
-                                    console.log('PromptPilot: Prompt delivered to tab');
+                                    console.log('PromptPilot: Could not reach content script');
                                 }
                             });
                         }
@@ -50,9 +60,9 @@ function connect() {
         };
 
         socket.onclose = () => {
-            console.log('PromptPilot: Disconnected. Retrying in 3s...');
+            console.log('PromptPilot: Disconnected. Retrying in 5s...');
             socket = null;
-            reconnectTimeout = setTimeout(connect, 3000);
+            reconnectTimeout = setTimeout(connect, 5000);
         };
 
         socket.onerror = () => {
@@ -61,7 +71,7 @@ function connect() {
 
     } catch (e) {
         console.log('PromptPilot: Could not connect');
-        reconnectTimeout = setTimeout(connect, 3000);
+        reconnectTimeout = setTimeout(connect, 5000);
     }
 }
 
@@ -72,6 +82,3 @@ chrome.alarms.onAlarm.addListener(() => {
         connect();
     }
 });
-
-// Start connecting when extension loads
-connect();

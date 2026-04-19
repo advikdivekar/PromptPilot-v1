@@ -1,10 +1,10 @@
-chrome.runtime.sendMessage({ type: 'getStatus' }, (response) => {
+chrome.storage.local.get(['channelId'], (result) => {
     const statusEl = document.getElementById('status');
-    if (response && response.connected) {
-        statusEl.textContent = '✅ Connected to VS Code';
+    if (result.channelId) {
+        statusEl.textContent = '✅ Connected to PromptPilot';
         statusEl.className = 'status connected';
     } else {
-        statusEl.textContent = '⚡ Waiting for VS Code...';
+        statusEl.textContent = '⚡ Open VS Code with PromptPilot to connect';
         statusEl.className = 'status disconnected';
     }
 });

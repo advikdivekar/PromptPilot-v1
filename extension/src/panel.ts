@@ -1,9 +1,22 @@
 import * as vscode from 'vscode';
-import * as cp from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
-import * as os from 'os';
-import { getBackendPath, getPythonPath, sendToIDEAgent, getApiKey } from './extension';
+import * as https from 'https';
+import { sendToIDEAgent, getApiKey, getChannelId, SERVER_URL } from './extension';
+
+interface HistoryEntry {
+    prompt: string;
+    refined: string;
+    timestamp: string;
+}
+
+const IGNORE_DIRS = new Set([
+    '.git', '__pycache__', 'venv', 'node_modules',
+    'chroma_db', 'dist', '.next', 'build', 'out', '.cache'
+]);
+
+const MAX_HISTORY = 20;
+const MAX_FILE_SIZE = 50000;
 
 export class SidebarPanel implements vscode.WebviewViewProvider {
     private _view?: vscode.WebviewView;
@@ -65,7 +78,10 @@ export class SidebarPanel implements vscode.WebviewViewProvider {
                     vscode.window.showInformationMessage('PromptPilot: Prompt copied to clipboard.');
                     break;
                 case 'reindex':
-                    await this._runIndexer();
+                    vscode.window.showInformationMessage(
+                        'PromptPilot: Project files are read automatically with each prompt.'
+                    );
+                    this._view?.webview.postMessage({ command: 'indexingDone' });
                     break;
                 case 'getCurrentFile':
                     this._sendCurrentFile();
@@ -83,6 +99,31 @@ export class SidebarPanel implements vscode.WebviewViewProvider {
 
         this._sendCurrentFile();
         this._updateView();
+
+        // Send channel ID to browser extension on startup
+        this._syncChannelId();
+    }
+
+    private async _syncChannelId() {
+        const apiKey = await getApiKey(this._context);
+        if (!apiKey) return;
+
+        const channelId = getChannelId(apiKey);
+
+        // Send channel ID to browser extension via a small local broadcast
+        // We use a temp WebSocket connection to localhost to check if old ws_server is running
+        // If not, we rely entirely on the hosted server
+        try {
+            const WebSocket = require('ws');
+            const ws = new WebSocket('ws://localhost:54321');
+            ws.on('open', () => {
+                ws.send(JSON.stringify({ type: 'setChannelId', channelId }));
+                ws.close();
+            });
+            ws.on('error', () => {
+                // Local server not running — browser extension connects directly to hosted server
+            });
+        } catch { }
     }
 
     private _sendCurrentFile() {
@@ -97,9 +138,169 @@ export class SidebarPanel implements vscode.WebviewViewProvider {
         });
     }
 
+    // ── Local file reading ────────────────────────────────────────────────────
+
+    private _getWorkspacePath(): string | null {
+        const folders = vscode.workspace.workspaceFolders;
+        return folders ? folders[0].uri.fsPath : null;
+    }
+
+    private _getProjectStructure(rootDir: string): string {
+        const lines: string[] = [];
+
+        const walk = (dir: string, level: number) => {
+            if (level > 4) return;
+            try {
+                const entries = fs.readdirSync(dir, { withFileTypes: true });
+                for (const entry of entries) {
+                    if (IGNORE_DIRS.has(entry.name) || entry.name.startsWith('.')) continue;
+                    const indent = '  '.repeat(level);
+                    if (entry.isDirectory()) {
+                        lines.push(`${indent}${entry.name}/`);
+                        walk(path.join(dir, entry.name), level + 1);
+                    } else {
+                        lines.push(`${indent}${entry.name}`);
+                    }
+                }
+            } catch { }
+        };
+
+        lines.push(path.basename(rootDir) + '/');
+        walk(rootDir, 1);
+        return lines.join('\n');
+    }
+
+    private _readFileContent(filePath: string): string {
+        try {
+            const stat = fs.statSync(filePath);
+            if (stat.size > MAX_FILE_SIZE) {
+                return `[File too large to include — ${Math.round(stat.size / 1024)}KB]`;
+            }
+            return fs.readFileSync(filePath, 'utf8');
+        } catch {
+            return '[Could not read file]';
+        }
+    }
+
+    private _buildContext(currentFile: string): string {
+        const workspacePath = this._getWorkspacePath();
+        if (!workspacePath) return '';
+
+        const parts: string[] = [];
+
+        // Project structure
+        try {
+            const structure = this._getProjectStructure(workspacePath);
+            parts.push(`--- Project Structure ---\n${structure}`);
+        } catch { }
+
+        // Config files
+        const configFiles = [
+            'package.json', 'requirements.txt', 'pyproject.toml',
+            'Pipfile', 'tsconfig.json', 'pom.xml', 'build.gradle'
+        ];
+        for (const config of configFiles) {
+            const configPath = path.join(workspacePath, config);
+            if (fs.existsSync(configPath)) {
+                const content = this._readFileContent(configPath);
+                parts.push(`--- ${config} ---\n${content}`);
+            }
+        }
+
+        // Current file — prefer the live editor content
+        const editor = vscode.window.activeTextEditor;
+        if (editor) {
+            const content = editor.document.getText();
+            if (content.length <= MAX_FILE_SIZE) {
+                parts.push(`--- ${currentFile} (current file) ---\n${content}`);
+            }
+        } else if (currentFile !== 'No file open') {
+            const fullPath = path.join(workspacePath, currentFile);
+            if (fs.existsSync(fullPath)) {
+                const content = this._readFileContent(fullPath);
+                parts.push(`--- ${currentFile} (current file) ---\n${content}`);
+            }
+        }
+
+        return parts.join('\n\n');
+    }
+
+    // ── Session memory (VS Code globalState) ──────────────────────────────────
+
+    private _getHistoryKey(currentFile: string): string {
+        return `pp_history_${currentFile.replace(/[^a-zA-Z0-9]/g, '_')}`;
+    }
+
+    private _loadHistory(currentFile: string): HistoryEntry[] {
+        const key = this._getHistoryKey(currentFile);
+        return this._context.globalState.get<HistoryEntry[]>(key, []);
+    }
+
+    private async _saveHistory(currentFile: string, history: HistoryEntry[]) {
+        const key = this._getHistoryKey(currentFile);
+        const trimmed = history.slice(-MAX_HISTORY);
+        await this._context.globalState.update(key, trimmed);
+    }
+
+    private _buildHistoryContext(currentFile: string): string {
+        const history = this._loadHistory(currentFile);
+        if (history.length === 0) return '';
+
+        const recent = history.slice(-5);
+        return recent.map(h =>
+            `[${h.timestamp}]\nDeveloper typed: ${h.prompt}\nRefined output: ${h.refined}`
+        ).join('\n\n');
+    }
+
+    // ── HTTP request to hosted server ─────────────────────────────────────────
+
+    private _postToServer(body: any): Promise<any> {
+        return new Promise((resolve, reject) => {
+            const data = JSON.stringify(body);
+            const serverUrl = new URL(SERVER_URL);
+
+            const options = {
+                hostname: serverUrl.hostname,
+                path: '/engineer',
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Content-Length': Buffer.byteLength(data)
+                },
+                timeout: 120000 // 2 minutes to handle spindown wake time
+            };
+
+            const req = https.request(options, (res) => {
+                let responseData = '';
+                res.on('data', (chunk: Buffer) => responseData += chunk.toString());
+                res.on('end', () => {
+                    try {
+                        const parsed = JSON.parse(responseData);
+                        if (res.statusCode && res.statusCode >= 400) {
+                            reject(new Error(parsed.detail || `Server error ${res.statusCode}`));
+                        } else {
+                            resolve(parsed);
+                        }
+                    } catch (e) {
+                        reject(new Error(`Failed to parse server response`));
+                    }
+                });
+            });
+
+            req.on('error', reject);
+            req.on('timeout', () => {
+                req.destroy();
+                reject(new Error('timeout'));
+            });
+
+            req.write(data);
+            req.end();
+        });
+    }
+
+    // ── Main backend call — now uses hosted server ────────────────────────────
+
     private async _runBackend(userPrompt: string, currentFile: string, attachments: any[] = []) {
-        const backendPath = getBackendPath(this._context);
-        const pythonPath = getPythonPath(backendPath);
         const apiKey = await getApiKey(this._context);
 
         if (!apiKey) {
@@ -113,116 +314,64 @@ export class SidebarPanel implements vscode.WebviewViewProvider {
 
         this._view?.webview.postMessage({ command: 'loading' });
 
-        const input = `${userPrompt}\n${currentFile}\n`;
+        try {
+            // Build context locally — no Python needed
+            const context = this._buildContext(currentFile);
+            const history = this._buildHistoryContext(currentFile);
 
-        // Write attachments to a temp file to avoid E2BIG error
-        // Environment variables have size limits — large base64 files break them
-        let tempFilePath = '';
-        const envVars: NodeJS.ProcessEnv = {
-            ...process.env,
-            GEMINI_API_KEY: apiKey
-        };
+            // POST to hosted server
+            const response = await this._postToServer({
+                user_prompt: userPrompt,
+                api_key: apiKey,
+                context: context,
+                history: history,
+                attachments: attachments
+            });
 
-        if (attachments && attachments.length > 0) {
-            tempFilePath = path.join(os.tmpdir(), `promptpilot_attachments_${Date.now()}.json`);
-            try {
-                fs.writeFileSync(tempFilePath, JSON.stringify(attachments));
-                envVars['PP_ATTACHMENTS_FILE'] = tempFilePath;
-            } catch (e) {
-                console.error('Could not write attachments temp file:', e);
+            const refined = response.refined_prompt;
+            if (!refined) throw new Error('Server returned empty response');
+
+            // Display refined prompt
+            this._view?.webview.postMessage({
+                command: 'refinedPrompt',
+                prompt: refined
+            });
+
+            // Save to session memory in VS Code storage
+            const existingHistory = this._loadHistory(currentFile);
+            existingHistory.push({
+                prompt: userPrompt,
+                refined: refined,
+                timestamp: new Date().toISOString()
+            });
+            await this._saveHistory(currentFile, existingHistory);
+
+        } catch (error: any) {
+            const msg = error.message || 'Unknown error';
+
+            if (msg.includes('timeout') || msg.includes('ECONNREFUSED') || msg.includes('socket hang up')) {
+                this._view?.webview.postMessage({
+                    command: 'error',
+                    message: 'Server is waking up — this takes about 30 seconds on the free tier. Please try again shortly.'
+                });
+            } else {
+                this._view?.webview.postMessage({
+                    command: 'error',
+                    message: msg
+                });
             }
         }
-
-        const childProcess = cp.spawn(pythonPath, ['main.py'], {
-            cwd: backendPath,
-            env: envVars
-        });
-
-        let fullOutput = '';
-        let errorOutput = '';
-
-        childProcess.stdin.write(input);
-        childProcess.stdin.end();
-
-        childProcess.stdout.on('data', (data: Buffer) => {
-            fullOutput += data.toString();
-        });
-
-        childProcess.stderr.on('data', (data: Buffer) => {
-            errorOutput += data.toString();
-        });
-
-        childProcess.on('close', (code: number) => {
-            // Clean up temp file
-            if (tempFilePath && fs.existsSync(tempFilePath)) {
-                try { fs.unlinkSync(tempFilePath); } catch { }
-            }
-
-            console.log('Backend output:', fullOutput);
-            console.log('Backend error:', errorOutput);
-
-            const marker = '--- Refined Prompt ---';
-            const markerIndex = fullOutput.indexOf(marker);
-
-            if (markerIndex !== -1) {
-                let refined = fullOutput.substring(markerIndex + marker.length);
-                const sessionLine = refined.indexOf('Session memory updated');
-                if (sessionLine !== -1) {
-                    refined = refined.substring(0, sessionLine);
-                }
-                refined = refined.trim();
-
-                if (refined) {
-                    this._view?.webview.postMessage({
-                        command: 'refinedPrompt',
-                        prompt: refined
-                    });
-                    return;
-                }
-            }
-
-            const isRealError = errorOutput.toLowerCase().includes('error') ||
-                errorOutput.toLowerCase().includes('traceback') ||
-                errorOutput.toLowerCase().includes('exception');
-
-            this._view?.webview.postMessage({
-                command: 'error',
-                message: isRealError
-                    ? errorOutput
-                    : 'Backend did not return a refined prompt. Try again.'
-            });
-        });
     }
 
     private async _sendPrompt(text: string) {
-        const sent = await sendToIDEAgent(text);
+        const apiKey = await getApiKey(this._context) || '';
+        const sent = await sendToIDEAgent(text, apiKey);
         if (!sent) {
             await vscode.env.clipboard.writeText(text);
             vscode.window.showInformationMessage(
                 'PromptPilot: Prompt copied to clipboard. Paste it into your AI agent.'
             );
         }
-    }
-
-    private async _runIndexer() {
-        const backendPath = getBackendPath(this._context);
-        const pythonPath = getPythonPath(backendPath);
-
-        this._view?.webview.postMessage({ command: 'indexing' });
-
-        const childProcess = cp.spawn(pythonPath, ['indexer.py'], {
-            cwd: backendPath
-        });
-
-        childProcess.on('close', (code: number) => {
-            if (code === 0) {
-                this._view?.webview.postMessage({ command: 'indexingDone' });
-                vscode.window.showInformationMessage('PromptPilot: Project indexed successfully.');
-            } else {
-                this._view?.webview.postMessage({ command: 'indexingFailed' });
-                vscode.window.showErrorMessage('PromptPilot: Indexing failed.');
-            }
-        });
     }
 
     private _getHtml(): string {
@@ -423,18 +572,9 @@ export class SidebarPanel implements vscode.WebviewViewProvider {
             pointer-events: none;
         }
 
-        .upload-types {
-            font-size: 10px;
-            color: var(--text-muted);
-            pointer-events: none;
-        }
+        .upload-types { font-size: 10px; color: var(--text-muted); pointer-events: none; }
 
-        .attachments-list {
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-            margin-top: 6px;
-        }
+        .attachments-list { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
 
         .attachment-item {
             display: flex;
@@ -519,10 +659,7 @@ export class SidebarPanel implements vscode.WebviewViewProvider {
             color: var(--text-secondary);
             border: 1px solid var(--border-strong);
         }
-        .btn-neutral:not(:disabled):hover {
-            background: rgba(255,255,255,0.1);
-            color: var(--text-primary);
-        }
+        .btn-neutral:not(:disabled):hover { background: rgba(255,255,255,0.1); color: var(--text-primary); }
 
         .btn-link {
             background: none;
@@ -538,11 +675,7 @@ export class SidebarPanel implements vscode.WebviewViewProvider {
         }
         .btn-link:hover { color: var(--text-secondary); }
 
-        .btn-row {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 6px;
-        }
+        .btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 
         .divider { height: 1px; background: var(--border); flex-shrink: 0; }
 
@@ -740,16 +873,13 @@ export class SidebarPanel implements vscode.WebviewViewProvider {
 
                 <textarea id="edit-area" placeholder="Edit the refined prompt..."></textarea>
 
-                <!-- Primary action -->
                 <button class="btn btn-success" id="accept-btn">Send to Agent</button>
 
-                <!-- Secondary actions -->
                 <div class="btn-row">
                     <button class="btn btn-neutral" id="copy-btn">Copy to Clipboard</button>
                     <button class="btn btn-ghost" id="edit-btn">Edit</button>
                 </div>
 
-                <!-- Reject -->
                 <button class="btn btn-danger" id="reject-btn">Reject — Try Again</button>
             </div>
 
@@ -787,13 +917,10 @@ export class SidebarPanel implements vscode.WebviewViewProvider {
             vscode.postMessage({ command: 'clearApiKey' });
         });
 
-        // File upload
         const fileInput = document.getElementById('file-input');
         const uploadArea = document.getElementById('upload-area');
 
-        fileInput.addEventListener('change', (e) => {
-            handleFiles(e.target.files);
-        });
+        fileInput.addEventListener('change', (e) => { handleFiles(e.target.files); });
 
         uploadArea.addEventListener('dragover', (e) => {
             e.preventDefault();
@@ -813,22 +940,15 @@ export class SidebarPanel implements vscode.WebviewViewProvider {
         function handleFiles(files) {
             const allowedTypes = [
                 'image/jpeg', 'image/png', 'image/gif', 'image/webp',
-                'application/pdf',
-                'application/msword',
+                'application/pdf', 'application/msword',
                 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
                 'text/plain'
             ];
-
             Array.from(files).slice(0, 5 - attachments.length).forEach(file => {
                 if (!allowedTypes.includes(file.type)) return;
-
                 const reader = new FileReader();
                 reader.onload = (e) => {
-                    attachments.push({
-                        name: file.name,
-                        mimeType: file.type,
-                        data: e.target.result.split(',')[1]
-                    });
+                    attachments.push({ name: file.name, mimeType: file.type, data: e.target.result.split(',')[1] });
                     renderAttachments();
                 };
                 reader.readAsDataURL(file);
@@ -844,10 +964,7 @@ export class SidebarPanel implements vscode.WebviewViewProvider {
 
         function renderAttachments() {
             const list = document.getElementById('attachments-list');
-            if (attachments.length === 0) {
-                list.style.display = 'none';
-                return;
-            }
+            if (attachments.length === 0) { list.style.display = 'none'; return; }
             list.style.display = 'flex';
             list.innerHTML = attachments.map((a, i) =>
                 '<div class="attachment-item">' +
@@ -865,39 +982,24 @@ export class SidebarPanel implements vscode.WebviewViewProvider {
 
         document.getElementById('engineer-btn').addEventListener('click', () => {
             const prompt = document.getElementById('user-prompt').value.trim();
-            if (!prompt) {
-                showStatus('Please enter a prompt first.', 'error', false);
-                return;
-            }
+            if (!prompt) { showStatus('Please enter a prompt first.', 'error', false); return; }
             document.getElementById('engineer-btn').disabled = true;
             document.getElementById('refined-section').style.display = 'none';
             showStatus('Engineering your prompt...', 'loading', true);
-            vscode.postMessage({
-                command: 'engineerPrompt',
-                userPrompt: prompt,
-                currentFile: currentFile,
-                attachments: attachments
-            });
+            vscode.postMessage({ command: 'engineerPrompt', userPrompt: prompt, currentFile: currentFile, attachments: attachments });
         });
 
-        // Send to agent
         document.getElementById('accept-btn').addEventListener('click', () => {
-            const textToSend = isEditing
-                ? document.getElementById('edit-area').value
-                : refinedPrompt;
+            const textToSend = isEditing ? document.getElementById('edit-area').value : refinedPrompt;
             vscode.postMessage({ command: 'acceptPrompt', refinedPrompt: textToSend });
             setTimeout(() => resetAfterSend(), 400);
         });
 
-        // Copy to clipboard only
         document.getElementById('copy-btn').addEventListener('click', () => {
-            const textToSend = isEditing
-                ? document.getElementById('edit-area').value
-                : refinedPrompt;
+            const textToSend = isEditing ? document.getElementById('edit-area').value : refinedPrompt;
             vscode.postMessage({ command: 'copyPrompt', refinedPrompt: textToSend });
         });
 
-        // Edit
         document.getElementById('edit-btn').addEventListener('click', () => {
             const editArea = document.getElementById('edit-area');
             if (!isEditing) {
@@ -912,7 +1014,6 @@ export class SidebarPanel implements vscode.WebviewViewProvider {
             }
         });
 
-        // Reject
         document.getElementById('reject-btn').addEventListener('click', () => {
             document.getElementById('refined-section').style.display = 'none';
             document.getElementById('edit-area').style.display = 'none';
@@ -922,10 +1023,7 @@ export class SidebarPanel implements vscode.WebviewViewProvider {
             hideStatus();
         });
 
-        // Re-index
         document.getElementById('reindex-btn').addEventListener('click', () => {
-            document.getElementById('reindex-btn').disabled = true;
-            showStatus('Indexing project...', 'loading', true);
             vscode.postMessage({ command: 'reindex' });
         });
 
@@ -968,17 +1066,9 @@ export class SidebarPanel implements vscode.WebviewViewProvider {
                     showStatus(message.message, 'error', false);
                     document.getElementById('engineer-btn').disabled = false;
                     break;
-                case 'indexing':
-                    showStatus('Indexing project...', 'loading', true);
-                    break;
                 case 'indexingDone':
-                    document.getElementById('reindex-btn').disabled = false;
-                    showStatus('Project indexed successfully.', 'success', false);
+                    showStatus('Project files read automatically each time.', 'success', false);
                     setTimeout(hideStatus, 3000);
-                    break;
-                case 'indexingFailed':
-                    document.getElementById('reindex-btn').disabled = false;
-                    showStatus('Indexing failed.', 'error', false);
                     break;
             }
         });
