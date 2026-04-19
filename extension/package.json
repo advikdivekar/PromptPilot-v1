@@ -1,13 +1,19 @@
 {
   "name": "prompt-engineer",
-  "displayName": "Prompt Engineer",
-  "description": "AI prompt engineering layer for IDE coding agents",
+  "displayName": "PromptPilot",
+  "description": "AI prompt engineering layer for IDE coding agents — works across VS Code, Cursor, Windsurf and all Chromium browsers",
   "version": "0.0.1",
+  "publisher": "ishandhole",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ishandhole/PromptPilot.git"
+  },
   "engines": {
     "vscode": "^1.85.0"
   },
   "categories": [
-    "Other"
+    "Other",
+    "Machine Learning"
   ],
   "activationEvents": [
     "onStartupFinished"
@@ -18,8 +24,8 @@
       "activitybar": [
         {
           "id": "prompt-engineer",
-          "title": "Prompt Engineer",
-          "icon": "$(wand)"
+          "title": "PromptPilot",
+          "icon": "icon.svg"
         }
       ]
     },
@@ -28,14 +34,18 @@
         {
           "type": "webview",
           "id": "promptEngineer.sidebar",
-          "name": "Prompt Engineer"
+          "name": "PromptPilot"
         }
       ]
     },
     "commands": [
       {
         "command": "promptEngineer.reindex",
-        "title": "Prompt Engineer: Re-index Project"
+        "title": "PromptPilot: Re-index Project"
+      },
+      {
+        "command": "promptEngineer.setApiKey",
+        "title": "PromptPilot: Set API Key"
       }
     ]
   },
@@ -49,10 +59,14 @@
   "devDependencies": {
     "@types/vscode": "^1.85.0",
     "@types/node": "20.x",
+    "@types/ws": "^8.5.10",
     "typescript": "^5.3.2",
     "webpack": "^5.89.0",
     "webpack-cli": "^5.1.4",
     "ts-loader": "^9.5.1",
     "eslint": "^8.56.0"
+  },
+  "dependencies": {
+    "ws": "^8.16.0"
   }
 }

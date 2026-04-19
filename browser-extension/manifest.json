@@ -1,0 +1,37 @@
+{
+    "manifest_version": 3,
+    "name": "PromptPilot",
+    "version": "0.0.1",
+    "description": "Receives engineered prompts from PromptPilot and pastes them into AI tools",
+    "permissions": [
+        "storage",
+        "activeTab",
+        "scripting",
+        "alarms"
+    ],
+    "host_permissions": [
+        "http://localhost:54321/*",
+        "ws://localhost:54321/*"
+    ],
+    "background": {
+        "service_worker": "background.js"
+    },
+    "content_scripts": [
+        {
+            "matches": [
+                "https://claude.ai/*",
+                "https://chatgpt.com/*",
+                "https://gemini.google.com/*",
+                "https://www.perplexity.ai/*",
+                "https://chat.openai.com/*"
+            ],
+            "js": [
+                "content.js"
+            ]
+        }
+    ],
+    "action": {
+        "default_popup": "popup.html",
+        "default_title": "PromptPilot"
+    }
+}

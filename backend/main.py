@@ -1,16 +1,23 @@
 from google import genai
 from google.genai import errors
+from google.genai import types
 from dotenv import load_dotenv
 from sentence_transformers import SentenceTransformer
 import chromadb
 import os
 import json
 import re
+import base64
 from datetime import datetime
 
 load_dotenv()
+api_key = os.environ.get("GEMINI_API_KEY")
+if not api_key:
+    print("[!] ERROR: No GEMINI_API_KEY found.")
+    print("Please set your API key in the PromptPilot extension settings.")
+    exit(1)
 
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+client = genai.Client(api_key=api_key)
 
 # Load embedding model and ChromaDB once at startup
 print("Loading RAG components...")
@@ -32,32 +39,23 @@ MODEL_CONTEXT_LIMITS = {
     "gemini-flash-latest": 1_000_000,
 }
 
-# We use 80% of the limit as a safe working threshold
 CONTEXT_WINDOW_SAFETY_FACTOR = 0.8
-
-# Session memory file — configuration, not logic
 SESSION_FILE = "session.json"
 
 MODELS = [
     "gemini-2.0-flash",
-    "gemini-2.0-flash-lite", 
+    "gemini-2.0-flash-lite",
     "gemini-1.5-flash",
     "gemini-flash-latest",
 ]
 
-# Server side errors that are recoverable — try next model
 RECOVERABLE_ERROR_CODES = ["500", "502", "503", "UNAVAILABLE", "INTERNAL"]
 
 
 # ── Exclusion System ──────────────────────────────────────────────────────────
 
 def load_excluded_files() -> set:
-    """
-    Reads .promptignore and returns a set of excluded filenames and folders.
-    SESSION_FILE is always excluded regardless of .promptignore contents.
-    Everything else is driven by the user-controlled .promptignore file.
-    """
-    excluded = {SESSION_FILE}  # always protect session memory
+    excluded = {SESSION_FILE}
     if os.path.exists(".promptignore"):
         with open(".promptignore", "r") as f:
             for line in f:
@@ -67,15 +65,10 @@ def load_excluded_files() -> set:
     return excluded
 
 
-# Load exclusions once at startup
 EXCLUDED = load_excluded_files()
 
 
 def is_excluded(filepath: str) -> bool:
-    """
-    Returns True if a file should never be surfaced to the LLM
-    or auto-detected. Driven entirely by .promptignore.
-    """
     basename = os.path.basename(filepath)
     if basename.startswith(".env"):
         return True
@@ -84,6 +77,8 @@ def is_excluded(filepath: str) -> bool:
             return True
     return False
 
+
+# ── System Prompts ────────────────────────────────────────────────────────────
 
 SYSTEM_PROMPT = """
 You are an expert prompt engineer who specializes in AI coding agents.
@@ -98,9 +93,14 @@ You will be given:
 - The file the developer is currently working on
 - Semantically relevant code chunks retrieved from the codebase
 - Relevant history of previous prompts and refined outputs for this file
+- Any images, documents, or files the developer has attached for context
 
 Use all of this context to make the rewritten prompt specific and accurate 
 to their actual codebase and current working session.
+
+If images are provided, analyze them carefully and incorporate visual details 
+into the refined prompt. If documents are provided, extract the key requirements 
+and include them in the refined prompt.
 
 Rules:
 - Be specific about what needs to be built or changed
@@ -109,6 +109,50 @@ Rules:
 - Preserve the original intent exactly
 - Never ask clarifying questions — make reasonable assumptions and state them explicitly
 - Output only the rewritten prompt, nothing else
+"""
+
+PROJECT_PROMPT = """
+You are an expert prompt engineer specializing in project planning and technical specifications.
+
+Your job is to take a rough project idea and transform it into a comprehensive, detailed prompt
+that an AI agent can use to produce exactly what the user needs.
+
+For project prompts:
+- Identify all the deliverables mentioned or implied
+- Specify technical requirements, architecture, and constraints
+- Include format requirements for any documents requested (PRDs, specs, diagrams)
+- Break down complex projects into clear, ordered components
+- Specify tech stack, tools, and frameworks where relevant
+- Include success criteria and acceptance conditions
+- Make assumptions explicit and reasonable
+- If images or documents are attached, extract requirements from them and incorporate them
+- Output only the rewritten prompt, nothing else
+"""
+
+GENERAL_PROMPT = """
+You are an expert prompt engineer.
+
+Your job is to take a rough, casual question or request and rewrite it into a clear,
+detailed prompt that will get the most accurate, useful, and comprehensive response from an AI.
+
+For general prompts:
+- Add specificity and context that improves the answer quality
+- Specify the desired format, depth, and style of response
+- Include relevant constraints or requirements
+- Make the intent completely unambiguous
+- If the question is about a technical topic, specify the level of detail needed
+- If images or documents are attached, incorporate their content into the prompt
+- Output only the rewritten prompt, nothing else
+"""
+
+CLASSIFICATION_PROMPT = """
+You are a prompt classifier. Given a developer's instruction, classify it into one of three types:
+
+1. "coding" — modifying, fixing, or building on existing code in a project
+2. "project" — creating something new from scratch that needs planning, architecture, or documents like PRDs
+3. "general" — questions, explanations, research, or tasks unrelated to a specific codebase
+
+Return only one word: coding, project, or general.
 """
 
 FILE_SELECTION_PROMPT = """
@@ -152,7 +196,6 @@ Example output:
 # ── Session Memory Functions ──────────────────────────────────────────────────
 
 def load_session() -> dict:
-    """Loads the full session history from disk. Creates file if it does not exist."""
     if not os.path.exists(SESSION_FILE):
         return {}
     try:
@@ -163,7 +206,6 @@ def load_session() -> dict:
 
 
 def save_session(session: dict):
-    """Saves the full session history to disk."""
     try:
         with open(SESSION_FILE, "w") as f:
             json.dump(session, f, indent=2)
@@ -172,12 +214,10 @@ def save_session(session: dict):
 
 
 def get_file_history(session: dict, filepath: str) -> list:
-    """Returns the history for a specific file."""
     return session.get(filepath, [])
 
 
 def append_to_history(session: dict, filepath: str, prompt: str, refined: str) -> dict:
-    """Appends a new exchange to the history for a specific file."""
     if filepath not in session:
         session[filepath] = []
     session[filepath].append({
@@ -189,18 +229,28 @@ def append_to_history(session: dict, filepath: str, prompt: str, refined: str) -
 
 
 def estimate_tokens(text: str) -> int:
-    """
-    Estimates token count from text.
-    A rough but reliable approximation: 1 token ≈ 4 characters.
-    """
     return len(text) // 4
 
 
+def classify_prompt(user_input: str) -> str:
+    """Classifies the prompt type to determine context strategy."""
+    for model in MODELS:
+        try:
+            response = client.models.generate_content(
+                model=model,
+                config={"system_instruction": CLASSIFICATION_PROMPT},
+                contents=user_input
+            )
+            result = response.text.strip().lower()
+            if result in ["coding", "project", "general"]:
+                return result
+            return "coding"
+        except Exception:
+            continue
+    return "coding"
+
+
 def select_relevant_history(user_input: str, history: list) -> list:
-    """
-    Uses an LLM call to select which previous exchanges are relevant
-    to the current prompt. Pure reasoning — no hardcoded count.
-    """
     if not history:
         return []
 
@@ -246,11 +296,6 @@ def select_relevant_history(user_input: str, history: list) -> list:
 
 
 def build_history_context(relevant_history: list, current_model: str, current_context_size: int) -> str:
-    """
-    Builds the history context string dynamically.
-    Stops adding exchanges when approaching the model's context window limit.
-    Fully dynamic — no hardcoded exchange count.
-    """
     if not relevant_history:
         return ""
 
@@ -284,10 +329,6 @@ def build_history_context(relevant_history: list, current_model: str, current_co
 # ── RAG Functions ─────────────────────────────────────────────────────────────
 
 def retrieve_relevant_chunks(user_input: str) -> str:
-    """
-    Embeds the user prompt and retrieves the most semantically
-    similar code chunks from the ChromaDB index.
-    """
     if not RAG_AVAILABLE:
         return ""
 
@@ -314,7 +355,6 @@ def retrieve_relevant_chunks(user_input: str) -> str:
 # ── Project Context Functions ─────────────────────────────────────────────────
 
 def get_project_structure(root_dir: str = ".") -> str:
-    """Walks the project directory and returns a tree-like structure string."""
     ignore = {".git", "__pycache__", "venv", "node_modules", "chroma_db"}
     lines = []
 
@@ -333,7 +373,6 @@ def get_project_structure(root_dir: str = ".") -> str:
 
 
 def get_most_recent_file(root_dir: str = ".") -> str:
-    """Finds the most recently modified file in the project."""
     ignore = {".git", "__pycache__", "venv", "node_modules", "chroma_db"}
     latest_file = None
     latest_time = 0
@@ -356,7 +395,6 @@ def get_most_recent_file(root_dir: str = ".") -> str:
 
 
 def get_all_project_files(root_dir: str = ".") -> list:
-    """Returns a flat list of all file paths, excluding sensitive and internal files."""
     ignore = {".git", "__pycache__", "venv", "node_modules", "chroma_db"}
     all_files = []
 
@@ -372,10 +410,6 @@ def get_all_project_files(root_dir: str = ".") -> list:
 
 
 def detect_relevant_files(user_input: str, all_files: list) -> list:
-    """
-    Uses an LLM call to intelligently detect which files are relevant
-    to the user's instruction.
-    """
     if not all_files:
         return []
 
@@ -409,7 +443,6 @@ def detect_relevant_files(user_input: str, all_files: list) -> list:
 
 
 def get_context_files(primary_file: str = None, extra_files: list = None) -> str:
-    """Reads config files, the primary working file, and any extra relevant files."""
     context_parts = []
 
     config_files = ["requirements.txt", "package.json", "pyproject.toml", "Pipfile"]
@@ -439,14 +472,38 @@ def get_context_files(primary_file: str = None, extra_files: list = None) -> str
 
 # ── API Functions ─────────────────────────────────────────────────────────────
 
-def call_gemini_api(model_name: str, user_input: str, context: str) -> str:
-    """Makes a single call to the Google Gemini API."""
-    full_input = f"{context}\n\n--- User Instruction ---\n{user_input}"
+def call_gemini_api(
+    model_name: str,
+    user_input: str,
+    context: str,
+    attachments: list = None,
+    system_prompt: str = None
+) -> str:
+    """Makes a single call to the Google Gemini API with optional file attachments."""
+    if system_prompt is None:
+        system_prompt = SYSTEM_PROMPT
+
+    # Only prepend context if it exists
+    full_input = f"{context}\n\n--- User Instruction ---\n{user_input}" if context.strip() else user_input
+
+    content_parts = [full_input]
+
+    if attachments:
+        for attachment in attachments:
+            try:
+                file_data = base64.b64decode(attachment['data'])
+                mime_type = attachment['mimeType']
+                content_parts.append(
+                    types.Part.from_bytes(data=file_data, mime_type=mime_type)
+                )
+                print(f"Attached file: {attachment.get('name', 'unknown')} ({mime_type})")
+            except Exception as e:
+                print(f"Warning: Could not process attachment: {e}")
 
     response = client.models.generate_content(
         model=model_name,
-        config={"system_instruction": SYSTEM_PROMPT},
-        contents=full_input
+        config={"system_instruction": system_prompt},
+        contents=content_parts
     )
 
     if not response.text or not response.text.strip():
@@ -455,14 +512,33 @@ def call_gemini_api(model_name: str, user_input: str, context: str) -> str:
     return response.text
 
 
-def rewrite_prompt(user_input: str, context: str) -> str:
-    """Attempts to refine the prompt using a chain of Gemini models."""
+def rewrite_prompt(user_input: str, context: str, attachments: list = None) -> str:
+    """
+    Classifies the prompt type and rewrites using the appropriate strategy.
+    - coding: uses full codebase context
+    - project: uses project planning prompt, no codebase noise
+    - general: uses general prompt engineering, no codebase noise
+    """
+    print("Classifying prompt type...")
+    prompt_type = classify_prompt(user_input)
+    print(f"Prompt type: {prompt_type}")
+
+    if prompt_type == "coding":
+        system = SYSTEM_PROMPT
+        active_context = context
+    elif prompt_type == "project":
+        system = PROJECT_PROMPT
+        active_context = ""
+    else:
+        system = GENERAL_PROMPT
+        active_context = ""
+
     last_error = None
 
     for model in MODELS:
         try:
             print(f"Attempting with {model}...")
-            return call_gemini_api(model, user_input, context)
+            return call_gemini_api(model, user_input, active_context, attachments, system)
         except errors.ClientError as e:
             last_error = e
             reason = "Quota exceeded" if "RESOURCE_EXHAUSTED" in str(e) else "Not found/supported"
@@ -486,7 +562,6 @@ if __name__ == "__main__":
     if not user_input.strip():
         print("Please enter a valid prompt.")
     else:
-        # Auto detect the most recently modified file
         detected_file = get_most_recent_file()
         print(f"\nAuto-detected current file: {detected_file}")
 
@@ -533,7 +608,19 @@ if __name__ == "__main__":
         structure = get_project_structure()
         file_context = get_context_files(current_file, extra_files)
 
-        # Build base context block without history first
+        # Read attachments from temp file passed by extension
+        attachments = []
+        attachments_file = os.environ.get("PP_ATTACHMENTS_FILE")
+        if attachments_file and os.path.exists(attachments_file):
+            try:
+                with open(attachments_file, "r") as f:
+                    attachments = json.load(f)
+                if attachments:
+                    print(f"Processing {len(attachments)} attachment(s)...")
+            except Exception as e:
+                print(f"Warning: Could not read attachments file: {e}")
+
+        # Build base context block
         base_context = f"""
 --- Project Structure ---
 {structure}
@@ -544,7 +631,7 @@ if __name__ == "__main__":
 {rag_chunks if rag_chunks else "None retrieved."}
 """.strip()
 
-        # Dynamically build history context based on available token budget
+        # Dynamically build history context
         current_model = MODELS[0]
         base_token_size = estimate_tokens(base_context)
         history_context = build_history_context(
@@ -553,7 +640,6 @@ if __name__ == "__main__":
             base_token_size
         )
 
-        # Assemble final context block
         if history_context:
             context_block = f"""
 --- Relevant Session History for {current_file} ---
@@ -566,11 +652,10 @@ if __name__ == "__main__":
 
         print("Engineering your prompt... please wait.")
         try:
-            refined = rewrite_prompt(user_input, context_block)
+            refined = rewrite_prompt(user_input, context_block, attachments)
             print("\n--- Refined Prompt ---")
             print(refined)
 
-            # Save this exchange to persistent memory
             session = append_to_history(session, current_file, user_input, refined)
             save_session(session)
             print(f"\nSession memory updated for {current_file}.")

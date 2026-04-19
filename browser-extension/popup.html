@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body {
+            width: 280px;
+            padding: 16px;
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            font-size: 13px;
+            color: #333;
+            background: #fff;
+        }
+
+        h2 {
+            font-size: 15px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .status {
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            margin-bottom: 12px;
+        }
+
+        .status.connected {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status.disconnected {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        p {
+            font-size: 12px;
+            color: #666;
+            line-height: 1.5;
+        }
+
+        .sites {
+            margin-top: 12px;
+            font-size: 11px;
+            color: #888;
+        }
+
+        .sites ul {
+            margin-top: 4px;
+            padding-left: 16px;
+        }
+
+        .sites li {
+            margin-bottom: 2px;
+        }
+    </style>
+</head>
+
+<body>
+    <h2>🚀 PromptPilot</h2>
+
+    <div class="status disconnected" id="status">
+        ⚡ Waiting for VS Code...
+    </div>
+
+    <p>
+        When you click <strong>Send to Agent</strong> in VS Code,
+        your engineered prompt will be automatically inserted into
+        the active AI tool.
+    </p>
+
+    <div class="sites">
+        <strong>Supported sites:</strong>
+        <ul>
+            <li>Claude.ai</li>
+            <li>ChatGPT</li>
+            <li>Gemini</li>
+            <li>Perplexity</li>
+        </ul>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+
+</html>
