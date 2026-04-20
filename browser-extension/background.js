@@ -2,23 +2,37 @@ let socket = null;
 let reconnectTimeout = null;
 let channelId = null;
 
-// Get channel ID from storage
-chrome.storage.local.get(['channelId'], (result) => {
-    if (result.channelId) {
+const WS_SERVER = 'wss://promptpilot-api.onrender.com';
+
+// Load channel ID from storage on startup
+chrome.storage.local.get(['channelId', 'connected'], (result) => {
+    if (result.channelId && result.connected) {
         channelId = result.channelId;
         connect();
     }
 });
 
-// Listen for channel ID being set
-chrome.runtime.onMessage.addListener((message) => {
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === 'setChannelId') {
         channelId = message.channelId;
-        chrome.storage.local.set({ channelId });
+        if (socket) {
+            socket.close();
+            socket = null;
+        }
         connect();
     }
+
+    if (message.type === 'disconnect') {
+        channelId = null;
+        if (socket) {
+            socket.close();
+            socket = null;
+        }
+    }
+
     if (message.type === 'getStatus') {
-        return { connected: socket && socket.readyState === WebSocket.OPEN };
+        sendResponse({ connected: socket && socket.readyState === WebSocket.OPEN });
+        return true;
     }
 });
 
@@ -27,7 +41,8 @@ function connect() {
     if (socket && socket.readyState === WebSocket.OPEN) return;
 
     try {
-        socket = new WebSocket(`wss://promptpilot-api.onrender.com/ws/${channelId}`);
+        console.log('PromptPilot: Connecting to channel', channelId.substring(0, 8) + '...');
+        socket = new WebSocket(`${WS_SERVER}/ws/${channelId}`);
 
         socket.onopen = () => {
             console.log('PromptPilot: Connected to hosted server');
@@ -70,15 +85,14 @@ function connect() {
         };
 
     } catch (e) {
-        console.log('PromptPilot: Could not connect');
+        console.log('PromptPilot: Could not connect:', e);
         reconnectTimeout = setTimeout(connect, 5000);
     }
 }
 
-// Keep service worker alive
 chrome.alarms.create('keepAlive', { periodInMinutes: 0.4 });
 chrome.alarms.onAlarm.addListener(() => {
-    if (!socket || socket.readyState !== WebSocket.OPEN) {
+    if (channelId && (!socket || socket.readyState !== WebSocket.OPEN)) {
         connect();
     }
 });

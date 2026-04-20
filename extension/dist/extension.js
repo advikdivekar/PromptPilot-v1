@@ -39,7 +39,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.WS_SERVER_URL = exports.SERVER_URL = void 0;
+exports.SERVER_URL = void 0;
 exports.activate = activate;
 exports.getChannelId = getChannelId;
 exports.sendToIDEAgent = sendToIDEAgent;
@@ -50,7 +50,6 @@ const https = __importStar(__webpack_require__(2));
 const crypto = __importStar(__webpack_require__(3));
 const panel_1 = __webpack_require__(4);
 exports.SERVER_URL = 'https://promptpilot-api.onrender.com';
-exports.WS_SERVER_URL = 'wss://promptpilot-api.onrender.com';
 function activate(context) {
     console.log('PromptPilot extension activated');
     const sidebarProvider = new panel_1.SidebarPanel(context.extensionUri, context);
@@ -73,13 +72,17 @@ function activate(context) {
     }));
 }
 function getChannelId(apiKey) {
+    // SHA-256 hash of API key — same algorithm as browser extension
+    // This means same API key always produces same channel ID
     return crypto.createHash('sha256').update(apiKey).digest('hex');
 }
 async function sendToIDEAgent(text, apiKey) {
     await vscode.env.clipboard.writeText(text);
     // Send to browser extension via hosted WebSocket server
-    const channelId = getChannelId(apiKey);
-    sendToBrowserViaServer(channelId, text);
+    if (apiKey) {
+        const channelId = getChannelId(apiKey);
+        sendToBrowserViaServer(channelId, text);
+    }
     // Try IDE agent commands
     try {
         await vscode.commands.executeCommand('aichat.newchataction');
@@ -106,7 +109,7 @@ async function sendToIDEAgent(text, apiKey) {
     return false;
 }
 function sendToBrowserViaServer(channelId, prompt) {
-    const body = JSON.stringify({ channel_id: channelId, prompt: prompt });
+    const body = JSON.stringify({ channel_id: channelId, prompt });
     const serverUrl = new URL(exports.SERVER_URL);
     const options = {
         hostname: serverUrl.hostname,

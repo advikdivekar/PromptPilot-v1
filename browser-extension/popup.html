@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <style>
         body {
-            width: 280px;
+            width: 300px;
             padding: 16px;
             font-family: -apple-system, BlinkMacSystemFont, sans-serif;
             font-size: 13px;
@@ -16,10 +16,7 @@
         h2 {
             font-size: 15px;
             font-weight: 600;
-            margin-bottom: 8px;
-            display: flex;
-            align-items: center;
-            gap: 6px;
+            margin-bottom: 12px;
         }
 
         .status {
@@ -35,14 +32,75 @@
         }
 
         .status.disconnected {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .status.error {
             background: #f8d7da;
             color: #721c24;
         }
 
-        p {
-            font-size: 12px;
+        .section {
+            margin-top: 12px;
+        }
+
+        .section-title {
+            font-size: 11px;
+            font-weight: 600;
             color: #666;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
+        }
+
+        input {
+            width: 100%;
+            padding: 6px 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 12px;
+            box-sizing: border-box;
+            margin-bottom: 6px;
+        }
+
+        button {
+            width: 100%;
+            padding: 7px;
+            background: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 500;
+            margin-bottom: 6px;
+        }
+
+        button:hover {
+            background: #2563eb;
+        }
+
+        .btn-secondary {
+            background: #f3f4f6;
+            color: #374151;
+            border: 1px solid #d1d5db;
+        }
+
+        .btn-secondary:hover {
+            background: #e5e7eb;
+        }
+
+        .help-text {
+            font-size: 11px;
+            color: #888;
             line-height: 1.5;
+            margin-top: 6px;
+        }
+
+        .help-text a {
+            color: #3b82f6;
+            text-decoration: none;
         }
 
         .sites {
@@ -59,30 +117,49 @@
         .sites li {
             margin-bottom: 2px;
         }
+
+        #connected-view {
+            display: none;
+        }
+
+        #setup-view {
+            display: block;
+        }
     </style>
 </head>
 
 <body>
-    <h2>🚀 PromptPilot</h2>
+    <h2>⚡ PromptPilot</h2>
 
-    <div class="status disconnected" id="status">
-        ⚡ Waiting for VS Code...
+    <div class="status" id="status">Checking...</div>
+
+    <!-- Setup view — shown when not connected -->
+    <div id="setup-view">
+        <div class="section">
+            <div class="section-title">Your Gemini API Key</div>
+            <input type="password" id="api-key-input" placeholder="AIzaSy..." />
+            <button id="connect-btn">Connect</button>
+            <div class="help-text">
+                Same key you entered in VS Code.
+                Get one free at <a href="https://aistudio.google.com" target="_blank">aistudio.google.com</a>
+            </div>
+        </div>
     </div>
 
-    <p>
-        When you click <strong>Send to Agent</strong> in VS Code,
-        your engineered prompt will be automatically inserted into
-        the active AI tool.
-    </p>
-
-    <div class="sites">
-        <strong>Supported sites:</strong>
-        <ul>
-            <li>Claude.ai</li>
-            <li>ChatGPT</li>
-            <li>Gemini</li>
-            <li>Perplexity</li>
-        </ul>
+    <!-- Connected view — shown when connected -->
+    <div id="connected-view">
+        <div class="sites">
+            <strong>Auto-paste works on:</strong>
+            <ul>
+                <li>Claude.ai</li>
+                <li>ChatGPT</li>
+                <li>Gemini</li>
+                <li>Perplexity</li>
+            </ul>
+        </div>
+        <div class="section">
+            <button class="btn-secondary" id="disconnect-btn">Disconnect</button>
+        </div>
     </div>
 
     <script src="popup.js"></script>

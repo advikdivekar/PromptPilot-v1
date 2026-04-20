@@ -4,7 +4,6 @@ import * as crypto from 'crypto';
 import { SidebarPanel } from './panel';
 
 export const SERVER_URL = 'https://promptpilot-api.onrender.com';
-export const WS_SERVER_URL = 'wss://promptpilot-api.onrender.com';
 
 export function activate(context: vscode.ExtensionContext) {
 	console.log('PromptPilot extension activated');
@@ -44,6 +43,8 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 export function getChannelId(apiKey: string): string {
+	// SHA-256 hash of API key — same algorithm as browser extension
+	// This means same API key always produces same channel ID
 	return crypto.createHash('sha256').update(apiKey).digest('hex');
 }
 
@@ -51,8 +52,10 @@ export async function sendToIDEAgent(text: string, apiKey: string): Promise<bool
 	await vscode.env.clipboard.writeText(text);
 
 	// Send to browser extension via hosted WebSocket server
-	const channelId = getChannelId(apiKey);
-	sendToBrowserViaServer(channelId, text);
+	if (apiKey) {
+		const channelId = getChannelId(apiKey);
+		sendToBrowserViaServer(channelId, text);
+	}
 
 	// Try IDE agent commands
 	try {
@@ -81,7 +84,7 @@ export async function sendToIDEAgent(text: string, apiKey: string): Promise<bool
 }
 
 function sendToBrowserViaServer(channelId: string, prompt: string) {
-	const body = JSON.stringify({ channel_id: channelId, prompt: prompt });
+	const body = JSON.stringify({ channel_id: channelId, prompt });
 	const serverUrl = new URL(SERVER_URL);
 
 	const options = {
@@ -100,7 +103,7 @@ function sendToBrowserViaServer(channelId: string, prompt: string) {
 		res.on('end', () => console.log('Browser send result:', data));
 	});
 
-	req.on('error', (e) => console.log('Browser send error:', e.message));
+	req.on('error', (e: Error) => console.log('Browser send error:', e.message));
 	req.write(body);
 	req.end();
 }
