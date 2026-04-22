@@ -4,6 +4,14 @@ let channelId = null;
 
 const WS_SERVER = 'wss://promptpilot-api.onrender.com';
 
+const SUPPORTED_SITES = [
+    'claude.ai',
+    'chatgpt.com',
+    'chat.openai.com',
+    'gemini.google.com',
+    'perplexity.ai'
+];
+
 // Auto-open setup page when extension is first installed
 chrome.runtime.onInstalled.addListener((details) => {
     if (details.reason === 'install') {
@@ -45,6 +53,35 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 });
 
+function sendToAITabs(prompt) {
+    // Query ALL tabs, not just the active one
+    chrome.tabs.query({}, (tabs) => {
+        let sent = false;
+
+        for (const tab of tabs) {
+            if (!tab.url) continue;
+
+            const isSupportedSite = SUPPORTED_SITES.some(site => tab.url.includes(site));
+            if (!isSupportedSite) continue;
+
+            chrome.tabs.sendMessage(tab.id, {
+                type: 'insertPrompt',
+                prompt: prompt
+            }, (response) => {
+                if (chrome.runtime.lastError) {
+                    console.log('PromptPilot: Could not reach tab', tab.url, chrome.runtime.lastError.message);
+                } else if (response && response.success) {
+                    console.log('PromptPilot: Prompt delivered to', tab.url);
+                    sent = true;
+                    // Bring this tab to focus so user sees the result
+                    chrome.tabs.update(tab.id, { active: true });
+                    chrome.windows.update(tab.windowId, { focused: true });
+                }
+            });
+        }
+    });
+}
+
 function connect() {
     if (!channelId) return;
     if (socket && socket.readyState === WebSocket.OPEN) return;
@@ -65,20 +102,8 @@ function connect() {
             try {
                 const data = JSON.parse(event.data);
                 if (data.type === 'prompt') {
-                    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-                        if (tabs[0]) {
-                            chrome.tabs.sendMessage(tabs[0].id, {
-                                type: 'insertPrompt',
-                                prompt: data.prompt
-                            }, (response) => {
-                                if (chrome.runtime.lastError) {
-                                    console.log('PromptPilot: Could not reach content script on this tab');
-                                } else {
-                                    console.log('PromptPilot: Prompt delivered');
-                                }
-                            });
-                        }
-                    });
+                    console.log('PromptPilot: Received prompt, sending to AI tabs...');
+                    sendToAITabs(data.prompt);
                 }
             } catch (e) {
                 console.error('PromptPilot: Failed to parse message', e);
