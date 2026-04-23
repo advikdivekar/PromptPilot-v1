@@ -1,12 +1,8 @@
 // ── Universal input detector ──────────────────────────────────────────────────
-// Instead of hardcoded selectors that break on UI updates, we score every
-// input/contenteditable on the page and pick the best candidate.
-// This works even when sites redesign their UI.
 
 function findBestInput() {
     const candidates = [];
 
-    // Collect all possible input elements
     const editables = document.querySelectorAll(
         '[contenteditable="true"], textarea, input[type="text"]'
     );
@@ -18,16 +14,13 @@ function findBestInput() {
         }
     }
 
-    // Sort by score descending — highest score = most likely chat input
     candidates.sort((a, b) => b.score - a.score);
-
     return candidates.length > 0 ? candidates[0].el : null;
 }
 
 function scoreElement(el) {
     let score = 0;
 
-    // Must be visible
     const rect = el.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) return 0;
     if (rect.top < 0 || rect.bottom > window.innerHeight + 200) return 0;
@@ -36,21 +29,17 @@ function scoreElement(el) {
     if (style.display === 'none' || style.visibility === 'hidden') return 0;
     if (style.opacity === '0') return 0;
 
-    // Size scoring — chat inputs are usually wide and near the bottom
     if (rect.width > 300) score += 20;
     if (rect.width > 500) score += 10;
 
-    // Position scoring — chat inputs are usually in the bottom half
     const viewportHeight = window.innerHeight;
     const elementCenter = rect.top + rect.height / 2;
     if (elementCenter > viewportHeight * 0.5) score += 15;
     if (elementCenter > viewportHeight * 0.7) score += 10;
 
-    // Element type scoring
     if (el.tagName === 'TEXTAREA') score += 25;
     if (el.getAttribute('contenteditable') === 'true') score += 20;
 
-    // Placeholder text hints
     const placeholder = (
         el.getAttribute('placeholder') ||
         el.getAttribute('aria-placeholder') ||
@@ -63,48 +52,108 @@ function scoreElement(el) {
     ];
 
     for (const hint of chatHints) {
-        if (placeholder.includes(hint)) {
-            score += 30;
-            break;
-        }
+        if (placeholder.includes(hint)) { score += 30; break; }
     }
 
-    // Aria label hints
     const ariaLabel = (el.getAttribute('aria-label') || '').toLowerCase();
     for (const hint of chatHints) {
-        if (ariaLabel.includes(hint)) {
-            score += 25;
-            break;
-        }
+        if (ariaLabel.includes(hint)) { score += 25; break; }
     }
 
-    // Role hints
     const role = el.getAttribute('role') || '';
     if (role === 'textbox') score += 20;
 
-    // ProseMirror editor (used by Claude, Notion, many modern apps)
     if (el.classList.contains('ProseMirror')) score += 30;
 
-    // Near the bottom of the page is a strong signal
     const distanceFromBottom = viewportHeight - rect.bottom;
     if (distanceFromBottom < 200) score += 20;
     if (distanceFromBottom < 100) score += 15;
 
-    // Penalty for small inputs (likely search boxes or form fields)
-    if (rect.height < 30 && el.tagName !== 'TEXTAREA') score -= 20;
-
-    // Penalty for inputs that already have a lot of content (not empty chat box)
     const content = el.textContent || el.value || '';
     if (content.length > 500) score -= 15;
+
+    if (rect.height < 30 && el.tagName !== 'TEXTAREA') score -= 20;
 
     return score;
 }
 
-function insertIntoElement(el, text) {
+// ── ChatGPT specific insertion ────────────────────────────────────────────────
+// ChatGPT uses ProseMirror with React fiber — standard DOM manipulation
+// does not trigger React's state. We simulate real keyboard events instead.
+
+async function insertIntoChatGPT(el, text) {
+    el.focus();
+
+    // Clear existing content
+    el.innerHTML = '<p><br></p>';
+    el.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    await wait(50);
+
+    // Move cursor to start
+    const range = document.createRange();
+    const sel = window.getSelection();
+    range.selectNodeContents(el);
+    range.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(range);
+
+    // Simulate typing character by character using keyboard events
+    // This is the only reliable way to trigger React's onChange in ProseMirror
+    for (const char of text) {
+        // keydown
+        el.dispatchEvent(new KeyboardEvent('keydown', {
+            key: char,
+            code: `Key${char.toUpperCase()}`,
+            charCode: char.charCodeAt(0),
+            keyCode: char.charCodeAt(0),
+            which: char.charCodeAt(0),
+            bubbles: true,
+            cancelable: true
+        }));
+
+        // beforeinput
+        el.dispatchEvent(new InputEvent('beforeinput', {
+            inputType: 'insertText',
+            data: char,
+            bubbles: true,
+            cancelable: true
+        }));
+
+        // Actually insert the character
+        document.execCommand('insertText', false, char);
+
+        // input
+        el.dispatchEvent(new InputEvent('input', {
+            inputType: 'insertText',
+            data: char,
+            bubbles: true
+        }));
+
+        // keyup
+        el.dispatchEvent(new KeyboardEvent('keyup', {
+            key: char,
+            bubbles: true
+        }));
+    }
+
+    await wait(100);
+    return el.textContent.trim().length > 0;
+}
+
+// ── Standard insertion for all other sites ────────────────────────────────────
+
+async function insertIntoElement(el, text) {
+    // Detect if this is ChatGPT's ProseMirror editor
+    const host = window.location.hostname;
+    const isChatGPT = host.includes('chatgpt.com') || host.includes('chat.openai.com');
+
+    if (isChatGPT) {
+        return await insertIntoChatGPT(el, text);
+    }
+
     el.focus();
 
     if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT') {
-        // Standard textarea/input — use React-compatible setter
         const proto = el.tagName === 'TEXTAREA'
             ? window.HTMLTextAreaElement.prototype
             : window.HTMLInputElement.prototype;
@@ -116,28 +165,25 @@ function insertIntoElement(el, text) {
         return el.value === text || el.value.includes(text);
 
     } else {
-        // contenteditable — try multiple approaches in order
-
-        // Approach 1: execCommand (works in most cases)
+        // Approach 1: execCommand
         el.innerHTML = '';
         el.focus();
         const execSuccess = document.execCommand('insertText', false, text);
         if (execSuccess && el.textContent.trim()) return true;
 
-        // Approach 2: ClipboardEvent paste simulation
+        // Approach 2: ClipboardEvent paste
         el.innerHTML = '';
         el.focus();
         const dataTransfer = new DataTransfer();
         dataTransfer.setData('text/plain', text);
-        const pasteEvent = new ClipboardEvent('paste', {
+        el.dispatchEvent(new ClipboardEvent('paste', {
             clipboardData: dataTransfer,
             bubbles: true,
             cancelable: true
-        });
-        el.dispatchEvent(pasteEvent);
+        }));
         if (el.textContent.trim()) return true;
 
-        // Approach 3: Direct innerHTML with InputEvent
+        // Approach 3: innerHTML with InputEvent
         el.innerHTML = `<p>${text}</p>`;
         el.dispatchEvent(new InputEvent('input', {
             bubbles: true,
@@ -169,56 +215,37 @@ function flashBorder(el) {
     const original = el.style.outline;
     el.style.outline = '2px solid #10b981';
     el.style.transition = 'outline 0.3s ease';
-    setTimeout(() => {
-        el.style.outline = original;
-    }, 1500);
-}
-
-// ── Site-specific pre-processing ──────────────────────────────────────────────
-// Some sites need special handling before injection.
-// This is kept minimal — just navigation/preparation, not selector hunting.
-
-async function prepareSite() {
-    const host = window.location.hostname;
-
-    // For Grok — sometimes need to wait for hydration
-    if (host.includes('x.com') || host.includes('grok.com')) {
-        await wait(300);
-    }
-
-    // For Mistral — wait for editor to initialise
-    if (host.includes('mistral.ai') || host.includes('chat.mistral.ai')) {
-        await wait(300);
-    }
+    setTimeout(() => { el.style.outline = original; }, 1500);
 }
 
 function wait(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// ── Main injection function ───────────────────────────────────────────────────
+async function prepareSite() {
+    const host = window.location.hostname;
+    if (host.includes('x.com') || host.includes('grok.com')) await wait(300);
+    if (host.includes('mistral.ai')) await wait(300);
+}
+
+// ── Main injection ────────────────────────────────────────────────────────────
 
 async function insertPrompt(text) {
     await prepareSite();
 
-    // Try to find the best input up to 3 times with short delays
-    // (some sites render the input after page load)
     for (let attempt = 0; attempt < 3; attempt++) {
         const el = findBestInput();
 
         if (el) {
-            const success = insertIntoElement(el, text);
+            const success = await insertIntoElement(el, text);
             if (success) {
                 flashBorder(el);
-                console.log('PromptPilot: Prompt inserted successfully on attempt', attempt + 1);
+                console.log('PromptPilot: Inserted on attempt', attempt + 1);
                 return true;
             }
         }
 
-        // Wait before retrying
-        if (attempt < 2) {
-            await wait(500);
-        }
+        if (attempt < 2) await wait(500);
     }
 
     console.log('PromptPilot: Could not find a suitable input field');
@@ -232,6 +259,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         insertPrompt(message.prompt).then(success => {
             sendResponse({ success });
         });
-        return true; // Keep channel open for async response
+        return true;
     }
 });
