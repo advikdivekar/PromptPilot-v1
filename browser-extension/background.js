@@ -9,7 +9,18 @@ const SUPPORTED_SITES = [
     'chatgpt.com',
     'chat.openai.com',
     'gemini.google.com',
-    'perplexity.ai'
+    'perplexity.ai',
+    'mistral.ai',
+    'chat.mistral.ai',
+    'x.com/i/grok',
+    'grok.com',
+    'grok.x.ai',
+    'phind.com',
+    'you.com',
+    'huggingface.co/chat',
+    'poe.com',
+    'copilot.microsoft.com',
+    'bing.com'
 ];
 
 // Auto-open setup page when extension is first installed

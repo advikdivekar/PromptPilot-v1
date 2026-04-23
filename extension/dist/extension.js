@@ -1,1 +1,1462 @@
-(()=>{"use strict";var e={265(e,n,t){var r,o=this&&this.__createBinding||(Object.create?function(e,n,t,r){void 0===r&&(r=t);var o=Object.getOwnPropertyDescriptor(n,t);o&&!("get"in o?!n.__esModule:o.writable||o.configurable)||(o={enumerable:!0,get:function(){return n[t]}}),Object.defineProperty(e,r,o)}:function(e,n,t,r){void 0===r&&(r=t),e[r]=n[t]}),s=this&&this.__setModuleDefault||(Object.create?function(e,n){Object.defineProperty(e,"default",{enumerable:!0,value:n})}:function(e,n){e.default=n}),a=this&&this.__importStar||(r=function(e){return r=Object.getOwnPropertyNames||function(e){var n=[];for(var t in e)Object.prototype.hasOwnProperty.call(e,t)&&(n[n.length]=t);return n},r(e)},function(e){if(e&&e.__esModule)return e;var n={};if(null!=e)for(var t=r(e),a=0;a<t.length;a++)"default"!==t[a]&&o(n,e,t[a]);return s(n,e),n});Object.defineProperty(n,"__esModule",{value:!0}),n.BROWSER_EXTENSION_URL=n.SERVER_URL=void 0,n.activate=function(e){console.log("PromptPilot extension activated"),function(){const e={hostname:new URL(n.SERVER_URL).hostname,path:"/health",method:"GET",timeout:3e4},t=d.request(e,e=>{console.log("PromptPilot: Server is awake and ready.")});t.on("error",()=>{console.log("PromptPilot: Server waking up in background...")}),t.on("timeout",()=>{t.destroy(),console.log("PromptPilot: Server wake up timed out — will retry on first prompt.")}),t.end()}();const t=new l.SidebarPanel(e.extensionUri,e);e.subscriptions.push(i.window.registerWebviewViewProvider("promptEngineer.sidebar",t)),e.subscriptions.push(i.commands.registerCommand("promptEngineer.reindex",()=>{i.window.showInformationMessage("PromptPilot: Project files are read automatically with each prompt.")})),e.subscriptions.push(i.commands.registerCommand("promptEngineer.setApiKey",async()=>{const n=await i.window.showInputBox({prompt:"Enter your Gemini API key",password:!0,placeHolder:"AIza...",ignoreFocusOut:!0});n&&(await e.secrets.store("geminiApiKey",n),i.window.showInformationMessage("PromptPilot: API key saved successfully."),t.refresh())}))},n.getChannelId=p,n.sendToIDEOnly=async function(e){await i.env.clipboard.writeText(e);try{return await i.commands.executeCommand("aichat.newchataction"),await new Promise(e=>setTimeout(e,500)),await i.commands.executeCommand("editor.action.clipboardPasteAction"),i.window.showInformationMessage("PromptPilot: Prompt sent to IDE agent."),!0}catch{}try{return await i.commands.executeCommand("workbench.panel.chat.view.copilot.focus"),await new Promise(e=>setTimeout(e,500)),await i.commands.executeCommand("editor.action.clipboardPasteAction"),i.window.showInformationMessage("PromptPilot: Prompt sent to Copilot chat."),!0}catch{}try{return await i.commands.executeCommand("workbench.action.chat.open",{query:e}),i.window.showInformationMessage("PromptPilot: Prompt sent to IDE agent."),!0}catch{}return i.window.showWarningMessage("PromptPilot: No IDE agent found. Prompt copied to clipboard."),!1},n.sendToBrowserOnly=async function(e,t){if(await i.env.clipboard.writeText(e),!t)return i.window.showWarningMessage("PromptPilot: No API key set."),!1;const r=p(t);return await u(r,e)?(i.window.showInformationMessage("PromptPilot: Prompt sent to your browser AI tool."),!0):("Install Browser Extension"===await i.window.showWarningMessage("PromptPilot: Browser extension not connected. Install it to auto-paste into Claude, ChatGPT, and Gemini.","Install Browser Extension","Use Clipboard Instead")&&i.env.openExternal(i.Uri.parse(n.BROWSER_EXTENSION_URL)),!1)},n.sendToBrowserViaServer=u,n.getApiKey=async function(e){return await e.secrets.get("geminiApiKey")},n.deactivate=function(){};const i=a(t(398)),d=a(t(692)),c=a(t(982)),l=t(710);function p(e){return c.createHash("sha256").update(e).digest("hex")}function u(e,t){return new Promise(r=>{const o=JSON.stringify({channel_id:e,prompt:t}),s={hostname:new URL(n.SERVER_URL).hostname,path:"/send",method:"POST",headers:{"Content-Type":"application/json","Content-Length":Buffer.byteLength(o)},timeout:1e4},a=d.request(s,e=>{let n="";e.on("data",e=>n+=e.toString()),e.on("end",()=>{try{const e=JSON.parse(n);r("sent"===e.status)}catch{r(!1)}})});a.on("error",()=>r(!1)),a.on("timeout",()=>{a.destroy(),r(!1)}),a.write(o),a.end()})}n.SERVER_URL="https://promptpilot-api.onrender.com",n.BROWSER_EXTENSION_URL="https://github.com/ishandhole/PromptPilot/releases/tag/v0.0.1"},710(e,n,t){var r,o=this&&this.__createBinding||(Object.create?function(e,n,t,r){void 0===r&&(r=t);var o=Object.getOwnPropertyDescriptor(n,t);o&&!("get"in o?!n.__esModule:o.writable||o.configurable)||(o={enumerable:!0,get:function(){return n[t]}}),Object.defineProperty(e,r,o)}:function(e,n,t,r){void 0===r&&(r=t),e[r]=n[t]}),s=this&&this.__setModuleDefault||(Object.create?function(e,n){Object.defineProperty(e,"default",{enumerable:!0,value:n})}:function(e,n){e.default=n}),a=this&&this.__importStar||(r=function(e){return r=Object.getOwnPropertyNames||function(e){var n=[];for(var t in e)Object.prototype.hasOwnProperty.call(e,t)&&(n[n.length]=t);return n},r(e)},function(e){if(e&&e.__esModule)return e;var n={};if(null!=e)for(var t=r(e),a=0;a<t.length;a++)"default"!==t[a]&&o(n,e,t[a]);return s(n,e),n});Object.defineProperty(n,"__esModule",{value:!0}),n.SidebarPanel=void 0;const i=a(t(398)),d=a(t(928)),c=a(t(896)),l=a(t(692)),p=t(265),u=new Set([".git","__pycache__","venv","node_modules","chroma_db","dist",".next","build","out",".cache"]);n.SidebarPanel=class{_view;_context;_extensionUri;constructor(e,n){this._extensionUri=e,this._context=n}refresh(){this._view&&this._updateView()}async _updateView(){const e=await(0,p.getApiKey)(this._context);if(e){this._view?.webview.postMessage({command:"showMain"});const n=(0,p.getChannelId)(e);this._checkBrowserConnection(n)}else this._view?.webview.postMessage({command:"showSetup"})}resolveWebviewView(e,n,t){this._view=e,e.webview.options={enableScripts:!0},e.webview.html=this._getHtml(),e.webview.onDidReceiveMessage(async e=>{switch(e.command){case"saveApiKey":await this._context.secrets.store("geminiApiKey",e.key),i.window.showInformationMessage("PromptPilot: API key saved."),this._view?.webview.postMessage({command:"showMain"});const n=e.key,t=(0,p.getChannelId)(n);this._checkBrowserConnection(t);break;case"engineerPrompt":await this._runBackend(e.userPrompt,e.currentFile,e.attachments||[]);break;case"sendToIDE":await(0,p.sendToIDEOnly)(e.refinedPrompt);break;case"sendToBrowser":const r=await(0,p.getApiKey)(this._context)||"";await(0,p.sendToBrowserOnly)(e.refinedPrompt,r);break;case"copyPrompt":await i.env.clipboard.writeText(e.refinedPrompt),i.window.showInformationMessage("PromptPilot: Prompt copied to clipboard.");break;case"reindex":i.window.showInformationMessage("PromptPilot: Project files are read automatically with each prompt."),this._view?.webview.postMessage({command:"indexingDone"});break;case"getCurrentFile":this._sendCurrentFile();break;case"checkApiKey":await this._updateView();break;case"clearApiKey":await this._context.secrets.delete("geminiApiKey"),this._view?.webview.postMessage({command:"showSetup"}),i.window.showInformationMessage("PromptPilot: API key cleared.");break;case"openInstallPage":i.env.openExternal(i.Uri.parse(p.BROWSER_EXTENSION_URL));break;case"checkBrowserConnection":const o=await(0,p.getApiKey)(this._context);o&&this._checkBrowserConnection((0,p.getChannelId)(o))}}),this._sendCurrentFile(),this._updateView()}_sendCurrentFile(){const e=i.window.activeTextEditor,n=e?d.basename(e.document.fileName):"No file open";this._view?.webview.postMessage({command:"currentFile",file:n})}_getWorkspacePath(){const e=i.workspace.workspaceFolders;return e?e[0].uri.fsPath:null}_getProjectStructure(e){const n=[],t=(e,r)=>{if(!(r>4))try{const o=c.readdirSync(e,{withFileTypes:!0});for(const s of o){if(u.has(s.name)||s.name.startsWith("."))continue;const o="  ".repeat(r);s.isDirectory()?(n.push(`${o}${s.name}/`),t(d.join(e,s.name),r+1)):n.push(`${o}${s.name}`)}}catch{}};return n.push(d.basename(e)+"/"),t(e,1),n.join("\n")}_readFileContent(e){try{const n=c.statSync(e);return n.size>5e4?`[File too large — ${Math.round(n.size/1024)}KB]`:c.readFileSync(e,"utf8")}catch{return"[Could not read file]"}}_buildContext(e){const n=this._getWorkspacePath();if(!n)return"";const t=[];try{const e=this._getProjectStructure(n);t.push(`--- Project Structure ---\n${e}`)}catch{}const r=["package.json","requirements.txt","pyproject.toml","Pipfile","tsconfig.json","pom.xml","build.gradle"];for(const e of r){const r=d.join(n,e);if(c.existsSync(r)){const n=this._readFileContent(r);t.push(`--- ${e} ---\n${n}`)}}const o=i.window.activeTextEditor;if(o){const n=o.document.getText();n.length<=5e4&&t.push(`--- ${e} (current file) ---\n${n}`)}else if("No file open"!==e){const r=d.join(n,e);if(c.existsSync(r)){const n=this._readFileContent(r);t.push(`--- ${e} (current file) ---\n${n}`)}}return t.join("\n\n")}_getHistoryKey(e){return`pp_history_${e.replace(/[^a-zA-Z0-9]/g,"_")}`}_loadHistory(e){const n=this._getHistoryKey(e);return this._context.globalState.get(n,[])}async _saveHistory(e,n){const t=this._getHistoryKey(e);await this._context.globalState.update(t,n.slice(-20))}_buildHistoryContext(e){const n=this._loadHistory(e);return 0===n.length?"":n.slice(-5).map(e=>`[${e.timestamp}]\nDeveloper typed: ${e.prompt}\nRefined output: ${e.refined}`).join("\n\n")}_checkBrowserConnection(e){const n=JSON.stringify({channel_id:e,prompt:"__ping__"}),t={hostname:"promptpilot-api.onrender.com",path:"/send",method:"POST",headers:{"Content-Type":"application/json","Content-Length":Buffer.byteLength(n)},timeout:8e3},r=l.request(t,e=>{let n="";e.on("data",e=>n+=e.toString()),e.on("end",()=>{try{const e="sent"===JSON.parse(n).status;this._view?.webview.postMessage({command:"browserStatus",connected:e})}catch{this._view?.webview.postMessage({command:"browserStatus",connected:!1})}})});r.on("error",()=>{this._view?.webview.postMessage({command:"browserStatus",connected:!1})}),r.write(n),r.end()}_postToServer(e){return new Promise((n,t)=>{const r=JSON.stringify(e),o={hostname:new URL(p.SERVER_URL).hostname,path:"/engineer",method:"POST",headers:{"Content-Type":"application/json","Content-Length":Buffer.byteLength(r)},timeout:12e4},s=l.request(o,e=>{let r="";e.on("data",e=>r+=e.toString()),e.on("end",()=>{try{const o=JSON.parse(r);e.statusCode&&e.statusCode>=400?t(new Error(o.detail||`Server error ${e.statusCode}`)):n(o)}catch(e){t(new Error("Failed to parse server response"))}})});s.on("error",t),s.on("timeout",()=>{s.destroy(),t(new Error("timeout"))}),s.write(r),s.end()})}async _runBackend(e,n,t=[]){const r=await(0,p.getApiKey)(this._context);if(!r)return this._view?.webview.postMessage({command:"error",message:"No API key found. Please enter your Gemini API key."}),void this._view?.webview.postMessage({command:"showSetup"});this._view?.webview.postMessage({command:"loading"});try{const o=this._buildContext(n),s=this._buildHistoryContext(n),a=(await this._postToServer({user_prompt:e,api_key:r,context:o,history:s,attachments:t})).refined_prompt;if(!a)throw new Error("Server returned empty response");this._view?.webview.postMessage({command:"refinedPrompt",prompt:a});const i=(0,p.getChannelId)(r);this._checkBrowserConnection(i);const d=this._loadHistory(n);d.push({prompt:e,refined:a,timestamp:(new Date).toISOString()}),await this._saveHistory(n,d)}catch(e){const n=e.message||"Unknown error";n.includes("timeout")||n.includes("ECONNREFUSED")||n.includes("socket hang up")?this._view?.webview.postMessage({command:"error",message:"Server is waking up — this takes about 30 seconds on the free tier. Please try again shortly."}):this._view?.webview.postMessage({command:"error",message:n})}}_getHtml(){return"<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n    <meta charset=\"UTF-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n    <title>PromptPilot</title>\n    <style>\n        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');\n\n        :root {\n            --accent: #3b82f6;\n            --accent-hover: #2563eb;\n            --accent-subtle: rgba(59, 130, 246, 0.1);\n            --accent-border: rgba(59, 130, 246, 0.25);\n            --surface-1: rgba(255, 255, 255, 0.04);\n            --surface-2: rgba(255, 255, 255, 0.07);\n            --border: rgba(255, 255, 255, 0.08);\n            --border-strong: rgba(255, 255, 255, 0.14);\n            --text-primary: rgba(255, 255, 255, 0.92);\n            --text-secondary: rgba(255, 255, 255, 0.55);\n            --text-muted: rgba(255, 255, 255, 0.32);\n            --success: #10b981;\n            --success-subtle: rgba(16, 185, 129, 0.1);\n            --danger: #ef4444;\n            --danger-subtle: rgba(239, 68, 68, 0.1);\n            --warning: #f59e0b;\n            --radius-sm: 5px;\n            --radius: 7px;\n        }\n\n        * { box-sizing: border-box; margin: 0; padding: 0; }\n        html, body { width: 100%; height: 100%; }\n\n        body {\n            font-family: 'Inter', var(--vscode-font-family), system-ui, sans-serif;\n            font-size: 12px;\n            color: var(--text-primary);\n            background: var(--vscode-sideBar-background);\n            display: flex;\n            flex-direction: column;\n            min-height: 100vh;\n            overflow-x: hidden;\n        }\n\n        .header {\n            padding: 12px 14px 10px;\n            border-bottom: 1px solid var(--border);\n            display: flex;\n            align-items: center;\n            justify-content: space-between;\n            flex-shrink: 0;\n        }\n\n        .header-left {\n            display: flex;\n            align-items: center;\n            gap: 8px;\n            min-width: 0;\n        }\n\n        .logo-mark {\n            width: 20px;\n            height: 20px;\n            background: var(--accent);\n            border-radius: 4px;\n            display: flex;\n            align-items: center;\n            justify-content: center;\n            flex-shrink: 0;\n        }\n\n        .logo-mark svg { width: 11px; height: 11px; fill: white; }\n\n        .logo-text {\n            font-size: 13px;\n            font-weight: 600;\n            color: var(--text-primary);\n            letter-spacing: -0.2px;\n            white-space: nowrap;\n            overflow: hidden;\n            text-overflow: ellipsis;\n        }\n\n        .header-badge {\n            font-size: 9px;\n            font-weight: 500;\n            color: var(--accent);\n            background: var(--accent-subtle);\n            border: 1px solid var(--accent-border);\n            padding: 1px 6px;\n            border-radius: 20px;\n            white-space: nowrap;\n            flex-shrink: 0;\n        }\n\n        .label {\n            font-size: 10px;\n            font-weight: 500;\n            color: var(--text-muted);\n            text-transform: uppercase;\n            letter-spacing: 0.6px;\n            margin-bottom: 5px;\n        }\n\n        .file-row {\n            display: flex;\n            align-items: center;\n            gap: 7px;\n            padding: 7px 10px;\n            background: var(--surface-1);\n            border: 1px solid var(--border);\n            border-radius: var(--radius);\n            min-width: 0;\n        }\n\n        .file-indicator {\n            width: 5px;\n            height: 5px;\n            border-radius: 50%;\n            background: var(--success);\n            flex-shrink: 0;\n        }\n\n        .file-label { font-size: 10px; color: var(--text-muted); flex-shrink: 0; }\n\n        .file-name {\n            font-family: 'JetBrains Mono', monospace;\n            font-size: 11px;\n            color: var(--text-primary);\n            overflow: hidden;\n            text-overflow: ellipsis;\n            white-space: nowrap;\n            min-width: 0;\n            flex: 1;\n        }\n\n        /* Browser status row */\n        .browser-status-row {\n            display: flex;\n            align-items: center;\n            gap: 6px;\n            padding: 5px 10px;\n            background: var(--surface-1);\n            border: 1px solid var(--border);\n            border-radius: var(--radius);\n            font-size: 10px;\n            color: var(--text-muted);\n            cursor: default;\n        }\n\n        .browser-dot {\n            width: 5px;\n            height: 5px;\n            border-radius: 50%;\n            background: var(--text-muted);\n            flex-shrink: 0;\n            transition: background 0.2s;\n        }\n\n        .browser-dot.connected { background: var(--success); }\n        .browser-dot.disconnected { background: var(--warning); }\n\n        .browser-status-text { flex: 1; }\n\n        .browser-install-link {\n            color: var(--accent);\n            font-size: 10px;\n            text-decoration: none;\n            cursor: pointer;\n            background: none;\n            border: none;\n            padding: 0;\n            font-family: inherit;\n        }\n\n        .browser-install-link:hover { text-decoration: underline; }\n\n        textarea, input[type=\"password\"], input[type=\"text\"] {\n            width: 100%;\n            background: var(--surface-1);\n            color: var(--text-primary);\n            border: 1px solid var(--border);\n            border-radius: var(--radius);\n            padding: 8px 10px;\n            font-family: 'Inter', var(--vscode-font-family), system-ui, sans-serif;\n            font-size: 12px;\n            outline: none;\n            transition: border-color 0.15s, background 0.15s;\n            resize: vertical;\n            line-height: 1.5;\n        }\n\n        textarea { min-height: 70px; }\n\n        textarea:focus, input:focus {\n            border-color: var(--accent-border);\n            background: var(--surface-2);\n        }\n\n        textarea::placeholder, input::placeholder { color: var(--text-muted); }\n\n        .upload-area {\n            border: 1px dashed var(--border-strong);\n            border-radius: var(--radius);\n            padding: 10px;\n            display: flex;\n            flex-direction: column;\n            gap: 4px;\n            cursor: pointer;\n            transition: border-color 0.15s, background 0.15s;\n            position: relative;\n        }\n\n        .upload-area:hover, .upload-area.drag-over {\n            border-color: var(--accent-border);\n            background: var(--accent-subtle);\n        }\n\n        .upload-area input[type=\"file\"] {\n            position: absolute;\n            inset: 0;\n            opacity: 0;\n            cursor: pointer;\n            width: 100%;\n            height: 100%;\n            padding: 0;\n            border: none;\n            background: none;\n        }\n\n        .upload-hint {\n            display: flex;\n            align-items: center;\n            gap: 6px;\n            color: var(--text-muted);\n            font-size: 11px;\n            pointer-events: none;\n        }\n\n        .upload-types { font-size: 10px; color: var(--text-muted); pointer-events: none; }\n\n        .attachments-list { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }\n\n        .attachment-item {\n            display: flex;\n            align-items: center;\n            gap: 6px;\n            padding: 5px 8px;\n            background: var(--surface-2);\n            border: 1px solid var(--border);\n            border-radius: var(--radius-sm);\n        }\n\n        .attachment-name {\n            flex: 1;\n            overflow: hidden;\n            text-overflow: ellipsis;\n            white-space: nowrap;\n            color: var(--text-secondary);\n            font-family: 'JetBrains Mono', monospace;\n            font-size: 10px;\n        }\n\n        .attachment-remove {\n            background: none;\n            border: none;\n            color: var(--text-muted);\n            cursor: pointer;\n            padding: 0 2px;\n            font-size: 14px;\n            line-height: 1;\n            width: auto;\n        }\n\n        .attachment-remove:hover { color: var(--danger); }\n\n        .btn {\n            width: 100%;\n            padding: 7px 12px;\n            border: none;\n            border-radius: var(--radius);\n            cursor: pointer;\n            font-size: 12px;\n            font-weight: 500;\n            font-family: 'Inter', var(--vscode-font-family), system-ui, sans-serif;\n            transition: all 0.15s ease;\n            display: flex;\n            align-items: center;\n            justify-content: center;\n            gap: 5px;\n        }\n\n        .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none !important; }\n\n        .btn-primary { background: var(--accent); color: white; }\n        .btn-primary:not(:disabled):hover { background: var(--accent-hover); transform: translateY(-1px); }\n\n        .btn-ghost {\n            background: var(--surface-1);\n            color: var(--text-secondary);\n            border: 1px solid var(--border);\n        }\n        .btn-ghost:not(:disabled):hover {\n            background: var(--surface-2);\n            border-color: var(--border-strong);\n            color: var(--text-primary);\n        }\n\n        .btn-success { background: var(--success); color: white; }\n        .btn-success:not(:disabled):hover { background: #059669; transform: translateY(-1px); }\n\n        /* IDE button — distinct teal colour */\n        .btn-ide {\n            background: #0d9488;\n            color: white;\n        }\n        .btn-ide:not(:disabled):hover { background: #0f766e; transform: translateY(-1px); }\n\n        .btn-neutral {\n            background: var(--surface-2);\n            color: var(--text-secondary);\n            border: 1px solid var(--border-strong);\n        }\n        .btn-neutral:not(:disabled):hover { background: rgba(255,255,255,0.1); color: var(--text-primary); }\n\n        .btn-danger {\n            background: var(--danger-subtle);\n            color: var(--danger);\n            border: 1px solid rgba(239, 68, 68, 0.2);\n        }\n        .btn-danger:not(:disabled):hover { background: rgba(239, 68, 68, 0.18); }\n\n        .btn-link {\n            background: none;\n            border: none;\n            color: var(--text-muted);\n            font-size: 11px;\n            cursor: pointer;\n            padding: 0;\n            font-family: inherit;\n            text-decoration: underline;\n            text-underline-offset: 2px;\n            width: auto;\n        }\n        .btn-link:hover { color: var(--text-secondary); }\n\n        .btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }\n        .btn-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px; }\n\n        .divider { height: 1px; background: var(--border); flex-shrink: 0; }\n\n        .section-label-small {\n            font-size: 9px;\n            text-transform: uppercase;\n            letter-spacing: 0.5px;\n            color: var(--text-muted);\n            text-align: center;\n            margin-bottom: 4px;\n        }\n\n        .status {\n            display: none;\n            align-items: center;\n            gap: 7px;\n            padding: 7px 10px;\n            border-radius: var(--radius);\n            font-size: 11px;\n            line-height: 1.4;\n        }\n        .status.loading { background: var(--accent-subtle); border: 1px solid var(--accent-border); color: var(--accent); }\n        .status.error { background: var(--danger-subtle); border: 1px solid rgba(239,68,68,0.2); color: var(--danger); }\n        .status.success { background: var(--success-subtle); border: 1px solid rgba(16,185,129,0.2); color: var(--success); }\n\n        .spinner {\n            width: 11px; height: 11px;\n            border: 1.5px solid currentColor;\n            border-top-color: transparent;\n            border-radius: 50%;\n            animation: spin 0.7s linear infinite;\n            flex-shrink: 0; opacity: 0.7;\n        }\n        @keyframes spin { to { transform: rotate(360deg); } }\n\n        .output-card {\n            background: var(--surface-1);\n            border: 1px solid var(--border);\n            border-radius: var(--radius);\n            overflow: hidden;\n            animation: fadeUp 0.2s ease;\n        }\n        @keyframes fadeUp { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }\n\n        .output-card-header {\n            display: flex;\n            align-items: center;\n            justify-content: space-between;\n            padding: 6px 10px;\n            border-bottom: 1px solid var(--border);\n            background: var(--surface-2);\n        }\n        .output-card-title { font-size: 10px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; }\n        .output-card-tag { font-size: 9px; color: var(--accent); background: var(--accent-subtle); padding: 1px 6px; border-radius: 3px; font-weight: 500; }\n\n        .output-card-body {\n            padding: 10px;\n            font-family: 'JetBrains Mono', monospace;\n            font-size: 11px;\n            line-height: 1.65;\n            color: var(--text-primary);\n            white-space: pre-wrap;\n            word-break: break-word;\n            max-height: 200px;\n            overflow-y: auto;\n            scrollbar-width: thin;\n            scrollbar-color: var(--border-strong) transparent;\n        }\n        .output-card-body::-webkit-scrollbar { width: 3px; }\n        .output-card-body::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 2px; }\n\n        #setup-screen { display: none; flex-direction: column; flex: 1; }\n        .setup-body { padding: 16px 14px; display: flex; flex-direction: column; gap: 14px; flex: 1; }\n        .setup-intro { display: flex; flex-direction: column; gap: 4px; }\n        .setup-title { font-size: 13px; font-weight: 600; color: var(--text-primary); }\n        .setup-desc { font-size: 11px; color: var(--text-secondary); line-height: 1.5; }\n        .setup-desc a { color: var(--accent); text-decoration: none; }\n        .setup-desc a:hover { text-decoration: underline; }\n        .steps { display: flex; flex-direction: column; gap: 8px; }\n        .steps-title { font-size: 10px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 2px; }\n        .step { display: flex; align-items: flex-start; gap: 8px; }\n        .step-num { width: 16px; height: 16px; border-radius: 50%; background: var(--surface-2); border: 1px solid var(--border-strong); font-size: 9px; font-weight: 600; color: var(--text-secondary); display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }\n        .step-text { font-size: 11px; color: var(--text-secondary); line-height: 1.5; }\n        .step-text a { color: var(--accent); text-decoration: none; }\n        .step-text a:hover { text-decoration: underline; }\n        .step-text code { font-family: 'JetBrains Mono', monospace; font-size: 10px; background: var(--surface-2); border: 1px solid var(--border); padding: 0 4px; border-radius: 3px; color: var(--text-primary); }\n        .secure-note { font-size: 10px; color: var(--text-muted); display: flex; align-items: center; gap: 5px; }\n\n        #main-screen { display: none; flex-direction: column; flex: 1; }\n        .main-body { padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; flex: 1; }\n        #refined-section { display: none; flex-direction: column; gap: 8px; animation: fadeUp 0.2s ease; }\n        #edit-area { display: none; }\n        .bottom-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 2px; }\n        .bottom-bar .btn-ghost { width: auto; padding: 5px 10px; font-size: 11px; }\n    </style>\n</head>\n<body>\n\n    \x3c!-- Header --\x3e\n    <div class=\"header\">\n        <div class=\"header-left\">\n            <div class=\"logo-mark\">\n                <svg viewBox=\"0 0 12 12\" xmlns=\"http://www.w3.org/2000/svg\">\n                    <path d=\"M7 1L2 7h4l-1 4 5-6H6l1-4z\"/>\n                </svg>\n            </div>\n            <span class=\"logo-text\">PromptPilot</span>\n        </div>\n        <span class=\"header-badge\">AI</span>\n    </div>\n\n    \x3c!-- Setup Screen --\x3e\n    <div id=\"setup-screen\">\n        <div class=\"setup-body\">\n            <div class=\"setup-intro\">\n                <div class=\"setup-title\">Connect your API key</div>\n                <div class=\"setup-desc\">\n                    PromptPilot uses the Gemini API to engineer your prompts.\n                    Get a free key — no credit card required.\n                </div>\n            </div>\n\n            <div class=\"steps\">\n                <div class=\"steps-title\">How to get your key</div>\n                <div class=\"step\">\n                    <div class=\"step-num\">1</div>\n                    <div class=\"step-text\">Go to <a href=\"https://aistudio.google.com\" target=\"_blank\">aistudio.google.com</a> and sign in with your Google account</div>\n                </div>\n                <div class=\"step\">\n                    <div class=\"step-num\">2</div>\n                    <div class=\"step-text\">Click <strong>Get API key</strong> then <strong>Create API key</strong></div>\n                </div>\n                <div class=\"step\">\n                    <div class=\"step-num\">3</div>\n                    <div class=\"step-text\">Copy the key — it starts with <code>AIza</code></div>\n                </div>\n                <div class=\"step\">\n                    <div class=\"step-num\">4</div>\n                    <div class=\"step-text\">Paste it below and click Save</div>\n                </div>\n            </div>\n\n            <div>\n                <div class=\"label\">Gemini API Key</div>\n                <input type=\"password\" id=\"api-key-input\" placeholder=\"AIzaSy...\" />\n            </div>\n\n            <button class=\"btn btn-primary\" id=\"save-key-btn\">Save &amp; Connect</button>\n\n            <div class=\"secure-note\">\n                <svg width=\"10\" height=\"10\" viewBox=\"0 0 12 12\" fill=\"currentColor\">\n                    <path d=\"M6 1C4.3 1 3 2.3 3 4v1H2v6h8V5H9V4C9 2.3 7.7 1 6 1zm0 1.5c.8 0 1.5.7 1.5 1.5v1h-3V4C4.5 3.2 5.2 2.5 6 2.5zM6 7c.6 0 1 .4 1 1s-.4 1-1 1-1-.4-1-1 .4-1 1-1z\"/>\n                </svg>\n                Stored securely in VS Code's encrypted secret storage\n            </div>\n        </div>\n    </div>\n\n    \x3c!-- Main Screen --\x3e\n    <div id=\"main-screen\">\n        <div class=\"main-body\">\n\n            \x3c!-- Current file --\x3e\n            <div class=\"file-row\">\n                <div class=\"file-indicator\"></div>\n                <span class=\"file-label\">Working on</span>\n                <span class=\"file-name\" id=\"current-file\">Detecting...</span>\n            </div>\n\n            \x3c!-- Browser connection status --\x3e\n            <div class=\"browser-status-row\" id=\"browser-status-row\" style=\"display:none\">\n                <div class=\"browser-dot\" id=\"browser-dot\"></div>\n                <span class=\"browser-status-text\" id=\"browser-status-text\">Checking browser...</span>\n                <button class=\"browser-install-link\" id=\"install-browser-btn\" style=\"display:none\">\n                    Install extension\n                </button>\n            </div>\n\n            \x3c!-- Prompt input --\x3e\n            <div>\n                <div class=\"label\">Your Prompt</div>\n                <textarea id=\"user-prompt\" placeholder=\"Describe what you want... e.g. fix the auth bug, make a DBMS project, add error handling\"></textarea>\n            </div>\n\n            \x3c!-- Attachments --\x3e\n            <div>\n                <div class=\"label\">Attachments <span style=\"color:var(--text-muted);font-size:9px;text-transform:none;letter-spacing:0\">(optional — images, PDFs, Word docs)</span></div>\n                <div class=\"upload-area\" id=\"upload-area\">\n                    <input type=\"file\" id=\"file-input\" multiple accept=\"image/*,.pdf,.doc,.docx,.txt\" />\n                    <div class=\"upload-hint\">\n                        <svg width=\"12\" height=\"12\" viewBox=\"0 0 12 12\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\">\n                            <path d=\"M6 1v7M3 4l3-3 3 3M1 9v1a1 1 0 001 1h8a1 1 0 001-1V9\"/>\n                        </svg>\n                        Click to upload or drag and drop\n                    </div>\n                    <div class=\"upload-types\">Images, PDF, Word, TXT — up to 5 files</div>\n                </div>\n                <div class=\"attachments-list\" id=\"attachments-list\" style=\"display:none\"></div>\n            </div>\n\n            <button class=\"btn btn-primary\" id=\"engineer-btn\">Engineer Prompt</button>\n\n            <div class=\"status\" id=\"status\">\n                <div class=\"spinner\" id=\"status-spinner\" style=\"display:none\"></div>\n                <span id=\"status-text\"></span>\n            </div>\n\n            \x3c!-- Refined output --\x3e\n            <div id=\"refined-section\">\n                <div class=\"output-card\">\n                    <div class=\"output-card-header\">\n                        <span class=\"output-card-title\">Refined Prompt</span>\n                        <span class=\"output-card-tag\">Enhanced</span>\n                    </div>\n                    <div class=\"output-card-body\" id=\"refined-output\"></div>\n                </div>\n\n                <textarea id=\"edit-area\" placeholder=\"Edit the refined prompt...\"></textarea>\n\n                \x3c!-- Send actions --\x3e\n                <div class=\"section-label-small\">Send to</div>\n                <div class=\"btn-row\">\n                    <button class=\"btn btn-success\" id=\"send-browser-btn\" title=\"Send to AI tool open in your browser (Claude, ChatGPT, Gemini, Perplexity)\">\n                        Browser Agent\n                    </button>\n                    <button class=\"btn btn-ide\" id=\"send-ide-btn\" title=\"Send to AI agent inside this IDE (Cursor, Copilot, Antigravity)\">\n                        IDE Agent\n                    </button>\n                </div>\n\n                \x3c!-- Secondary actions --\x3e\n                <div class=\"btn-row\">\n                    <button class=\"btn btn-neutral\" id=\"copy-btn\">Copy</button>\n                    <button class=\"btn btn-ghost\" id=\"edit-btn\">Edit</button>\n                </div>\n\n                <button class=\"btn btn-danger\" id=\"reject-btn\">Reject — Try Again</button>\n            </div>\n\n            <div class=\"divider\"></div>\n\n            <div class=\"bottom-bar\">\n                <button class=\"btn btn-ghost\" id=\"reindex-btn\">Re-index Project</button>\n                <button class=\"btn-link\" id=\"change-key-btn\">Change key</button>\n            </div>\n\n        </div>\n    </div>\n\n    <script>\n        const vscode = acquireVsCodeApi();\n        let currentFile = '';\n        let refinedPrompt = '';\n        let isEditing = false;\n        let attachments = [];\n\n        vscode.postMessage({ command: 'checkApiKey' });\n        vscode.postMessage({ command: 'getCurrentFile' });\n\n        // Setup\n        document.getElementById('save-key-btn').addEventListener('click', () => {\n            const key = document.getElementById('api-key-input').value.trim();\n            if (!key) return;\n            vscode.postMessage({ command: 'saveApiKey', key });\n        });\n\n        document.getElementById('api-key-input').addEventListener('keydown', (e) => {\n            if (e.key === 'Enter') document.getElementById('save-key-btn').click();\n        });\n\n        document.getElementById('change-key-btn').addEventListener('click', () => {\n            vscode.postMessage({ command: 'clearApiKey' });\n        });\n\n        // Install browser extension link\n        document.getElementById('install-browser-btn').addEventListener('click', () => {\n            vscode.postMessage({ command: 'openInstallPage' });\n        });\n\n        // File upload\n        const fileInput = document.getElementById('file-input');\n        const uploadArea = document.getElementById('upload-area');\n\n        fileInput.addEventListener('change', (e) => { handleFiles(e.target.files); });\n\n        uploadArea.addEventListener('dragover', (e) => {\n            e.preventDefault();\n            uploadArea.classList.add('drag-over');\n        });\n\n        uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('drag-over'));\n\n        uploadArea.addEventListener('drop', (e) => {\n            e.preventDefault();\n            uploadArea.classList.remove('drag-over');\n            handleFiles(e.dataTransfer.files);\n        });\n\n        function handleFiles(files) {\n            const allowedTypes = [\n                'image/jpeg', 'image/png', 'image/gif', 'image/webp',\n                'application/pdf', 'application/msword',\n                'application/vnd.openxmlformats-officedocument.wordprocessingml.document',\n                'text/plain'\n            ];\n            Array.from(files).slice(0, 5 - attachments.length).forEach(file => {\n                if (!allowedTypes.includes(file.type)) return;\n                const reader = new FileReader();\n                reader.onload = (e) => {\n                    attachments.push({ name: file.name, mimeType: file.type, data: e.target.result.split(',')[1] });\n                    renderAttachments();\n                };\n                reader.readAsDataURL(file);\n            });\n        }\n\n        function getFileIcon(mimeType) {\n            if (mimeType.startsWith('image/')) return '🖼';\n            if (mimeType === 'application/pdf') return '📄';\n            if (mimeType.includes('word')) return '📝';\n            return '📎';\n        }\n\n        function renderAttachments() {\n            const list = document.getElementById('attachments-list');\n            if (attachments.length === 0) { list.style.display = 'none'; return; }\n            list.style.display = 'flex';\n            list.innerHTML = attachments.map((a, i) =>\n                '<div class=\"attachment-item\">' +\n                '<span style=\"font-size:12px;flex-shrink:0\">' + getFileIcon(a.mimeType) + '</span>' +\n                '<span class=\"attachment-name\">' + a.name + '</span>' +\n                '<button class=\"attachment-remove\" onclick=\"removeAttachment(' + i + ')\">×</button>' +\n                '</div>'\n            ).join('');\n        }\n\n        function removeAttachment(index) {\n            attachments.splice(index, 1);\n            renderAttachments();\n        }\n\n        // Engineer prompt\n        document.getElementById('engineer-btn').addEventListener('click', () => {\n            const prompt = document.getElementById('user-prompt').value.trim();\n            if (!prompt) { showStatus('Please enter a prompt first.', 'error', false); return; }\n            document.getElementById('engineer-btn').disabled = true;\n            document.getElementById('refined-section').style.display = 'none';\n            showStatus('Engineering your prompt...', 'loading', true);\n            vscode.postMessage({ command: 'engineerPrompt', userPrompt: prompt, currentFile, attachments });\n        });\n\n        // Send to browser agent only\n        document.getElementById('send-browser-btn').addEventListener('click', () => {\n            const text = isEditing ? document.getElementById('edit-area').value : refinedPrompt;\n            vscode.postMessage({ command: 'sendToBrowser', refinedPrompt: text });\n            setTimeout(() => resetAfterSend(), 400);\n        });\n\n        // Send to IDE agent only\n        document.getElementById('send-ide-btn').addEventListener('click', () => {\n            const text = isEditing ? document.getElementById('edit-area').value : refinedPrompt;\n            vscode.postMessage({ command: 'sendToIDE', refinedPrompt: text });\n            setTimeout(() => resetAfterSend(), 400);\n        });\n\n        // Copy\n        document.getElementById('copy-btn').addEventListener('click', () => {\n            const text = isEditing ? document.getElementById('edit-area').value : refinedPrompt;\n            vscode.postMessage({ command: 'copyPrompt', refinedPrompt: text });\n        });\n\n        // Edit\n        document.getElementById('edit-btn').addEventListener('click', () => {\n            const editArea = document.getElementById('edit-area');\n            if (!isEditing) {\n                editArea.value = refinedPrompt;\n                editArea.style.display = 'block';\n                document.getElementById('edit-btn').textContent = 'Done';\n                isEditing = true;\n            } else {\n                editArea.style.display = 'none';\n                document.getElementById('edit-btn').textContent = 'Edit';\n                isEditing = false;\n            }\n        });\n\n        // Reject\n        document.getElementById('reject-btn').addEventListener('click', () => {\n            document.getElementById('refined-section').style.display = 'none';\n            document.getElementById('edit-area').style.display = 'none';\n            document.getElementById('user-prompt').value = '';\n            document.getElementById('user-prompt').focus();\n            isEditing = false;\n            hideStatus();\n        });\n\n        // Re-index\n        document.getElementById('reindex-btn').addEventListener('click', () => {\n            vscode.postMessage({ command: 'reindex' });\n        });\n\n        function resetAfterSend() {\n            document.getElementById('user-prompt').value = '';\n            document.getElementById('refined-section').style.display = 'none';\n            document.getElementById('edit-area').style.display = 'none';\n            attachments = [];\n            renderAttachments();\n            isEditing = false;\n            hideStatus();\n        }\n\n        window.addEventListener('message', (event) => {\n            const message = event.data;\n            switch (message.command) {\n                case 'showSetup':\n                    document.getElementById('setup-screen').style.display = 'flex';\n                    document.getElementById('main-screen').style.display = 'none';\n                    break;\n                case 'showMain':\n                    document.getElementById('setup-screen').style.display = 'none';\n                    document.getElementById('main-screen').style.display = 'flex';\n                    // Check browser connection when main screen shows\n                    vscode.postMessage({ command: 'checkBrowserConnection' });\n                    break;\n                case 'currentFile':\n                    currentFile = message.file;\n                    document.getElementById('current-file').textContent = message.file;\n                    break;\n                case 'loading':\n                    showStatus('Engineering your prompt...', 'loading', true);\n                    break;\n                case 'refinedPrompt':\n                    refinedPrompt = message.prompt;\n                    document.getElementById('refined-output').textContent = message.prompt;\n                    document.getElementById('refined-section').style.display = 'flex';\n                    document.getElementById('engineer-btn').disabled = false;\n                    hideStatus();\n                    break;\n                case 'error':\n                    showStatus(message.message, 'error', false);\n                    document.getElementById('engineer-btn').disabled = false;\n                    break;\n                case 'indexingDone':\n                    showStatus('Project files read automatically each time.', 'success', false);\n                    setTimeout(hideStatus, 3000);\n                    break;\n                case 'browserStatus':\n                    const browserRow = document.getElementById('browser-status-row');\n                    const browserDot = document.getElementById('browser-dot');\n                    const browserText = document.getElementById('browser-status-text');\n                    const installBtn = document.getElementById('install-browser-btn');\n                    const sendBrowserBtn = document.getElementById('send-browser-btn');\n\n                    browserRow.style.display = 'flex';\n\n                    if (message.connected) {\n                        browserDot.className = 'browser-dot connected';\n                        browserText.textContent = 'Browser extension connected';\n                        installBtn.style.display = 'none';\n                        sendBrowserBtn.disabled = false;\n                        sendBrowserBtn.title = 'Send to AI tool open in your browser';\n                    } else {\n                        browserDot.className = 'browser-dot disconnected';\n                        browserText.textContent = 'Browser extension not connected';\n                        installBtn.style.display = 'block';\n                        sendBrowserBtn.disabled = false;\n                        sendBrowserBtn.title = 'Browser extension not connected — click to install';\n                    }\n                    break;\n            }\n        });\n\n        function showStatus(msg, type, showSpinner) {\n            const el = document.getElementById('status');\n            const spinner = document.getElementById('status-spinner');\n            const text = document.getElementById('status-text');\n            el.className = 'status ' + type;\n            el.style.display = 'flex';\n            text.textContent = msg;\n            spinner.style.display = showSpinner ? 'block' : 'none';\n        }\n\n        function hideStatus() {\n            document.getElementById('status').style.display = 'none';\n        }\n    <\/script>\n</body>\n</html>"}}},398(e){e.exports=require("vscode")},982(e){e.exports=require("crypto")},896(e){e.exports=require("fs")},692(e){e.exports=require("https")},928(e){e.exports=require("path")}},n={},t=function t(r){var o=n[r];if(void 0!==o)return o.exports;var s=n[r]={exports:{}};return e[r].call(s.exports,s,s.exports,t),s.exports}(265);module.exports=t})();
+/******/ (() => { // webpackBootstrap
+/******/ 	"use strict";
+/******/ 	var __webpack_modules__ = ([
+/* 0 */
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.BROWSER_EXTENSION_URL = exports.SERVER_URL = void 0;
+exports.activate = activate;
+exports.getChannelId = getChannelId;
+exports.sendToIDEOnly = sendToIDEOnly;
+exports.sendToBrowserOnly = sendToBrowserOnly;
+exports.sendToBrowserViaServer = sendToBrowserViaServer;
+exports.getApiKey = getApiKey;
+exports.deactivate = deactivate;
+const vscode = __importStar(__webpack_require__(1));
+const https = __importStar(__webpack_require__(2));
+const crypto = __importStar(__webpack_require__(3));
+const panel_1 = __webpack_require__(4);
+exports.SERVER_URL = 'https://promptpilot-api.onrender.com';
+exports.BROWSER_EXTENSION_URL = 'https://github.com/ishandhole/PromptPilot/releases/tag/v0.0.1';
+function activate(context) {
+    console.log('PromptPilot extension activated');
+    // Wake up the Render server immediately on activation
+    // Free tier spins down after 15min — this ensures it is warm before first use
+    wakeUpServer();
+    const sidebarProvider = new panel_1.SidebarPanel(context.extensionUri, context);
+    context.subscriptions.push(vscode.window.registerWebviewViewProvider('promptEngineer.sidebar', sidebarProvider));
+    context.subscriptions.push(vscode.commands.registerCommand('promptEngineer.reindex', () => {
+        vscode.window.showInformationMessage('PromptPilot: Project files are read automatically with each prompt.');
+    }));
+    context.subscriptions.push(vscode.commands.registerCommand('promptEngineer.setApiKey', async () => {
+        const key = await vscode.window.showInputBox({
+            prompt: 'Enter your Gemini API key',
+            password: true,
+            placeHolder: 'AIza...',
+            ignoreFocusOut: true
+        });
+        if (key) {
+            await context.secrets.store('geminiApiKey', key);
+            vscode.window.showInformationMessage('PromptPilot: API key saved successfully.');
+            sidebarProvider.refresh();
+        }
+    }));
+}
+function wakeUpServer() {
+    const serverUrl = new URL(exports.SERVER_URL);
+    const options = {
+        hostname: serverUrl.hostname,
+        path: '/health',
+        method: 'GET',
+        timeout: 30000
+    };
+    const req = https.request(options, (res) => {
+        console.log('PromptPilot: Server is awake and ready.');
+    });
+    req.on('error', () => {
+        // Server is waking up — this is expected on cold start
+        // The sidebar will handle the delay gracefully
+        console.log('PromptPilot: Server waking up in background...');
+    });
+    req.on('timeout', () => {
+        req.destroy();
+        console.log('PromptPilot: Server wake up timed out — will retry on first prompt.');
+    });
+    req.end();
+}
+function getChannelId(apiKey) {
+    return crypto.createHash('sha256').update(apiKey).digest('hex');
+}
+async function sendToIDEOnly(text) {
+    await vscode.env.clipboard.writeText(text);
+    try {
+        await vscode.commands.executeCommand('aichat.newchataction');
+        await new Promise(resolve => setTimeout(resolve, 500));
+        await vscode.commands.executeCommand('editor.action.clipboardPasteAction');
+        vscode.window.showInformationMessage('PromptPilot: Prompt sent to IDE agent.');
+        return true;
+    }
+    catch { }
+    try {
+        await vscode.commands.executeCommand('workbench.panel.chat.view.copilot.focus');
+        await new Promise(resolve => setTimeout(resolve, 500));
+        await vscode.commands.executeCommand('editor.action.clipboardPasteAction');
+        vscode.window.showInformationMessage('PromptPilot: Prompt sent to Copilot chat.');
+        return true;
+    }
+    catch { }
+    try {
+        await vscode.commands.executeCommand('workbench.action.chat.open', { query: text });
+        vscode.window.showInformationMessage('PromptPilot: Prompt sent to IDE agent.');
+        return true;
+    }
+    catch { }
+    vscode.window.showWarningMessage('PromptPilot: No IDE agent found. Prompt copied to clipboard.');
+    return false;
+}
+async function sendToBrowserOnly(text, apiKey) {
+    await vscode.env.clipboard.writeText(text);
+    if (!apiKey) {
+        vscode.window.showWarningMessage('PromptPilot: No API key set.');
+        return false;
+    }
+    const channelId = getChannelId(apiKey);
+    const browserResult = await sendToBrowserViaServer(channelId, text);
+    if (browserResult) {
+        vscode.window.showInformationMessage('PromptPilot: Prompt sent to your browser AI tool.');
+        return true;
+    }
+    const action = await vscode.window.showWarningMessage('PromptPilot: Browser extension not connected. Install it to auto-paste into Claude, ChatGPT, and Gemini.', 'Install Browser Extension', 'Use Clipboard Instead');
+    if (action === 'Install Browser Extension') {
+        vscode.env.openExternal(vscode.Uri.parse(exports.BROWSER_EXTENSION_URL));
+    }
+    return false;
+}
+function sendToBrowserViaServer(channelId, prompt) {
+    return new Promise((resolve) => {
+        const body = JSON.stringify({ channel_id: channelId, prompt });
+        const serverUrl = new URL(exports.SERVER_URL);
+        const options = {
+            hostname: serverUrl.hostname,
+            path: '/send',
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Content-Length': Buffer.byteLength(body)
+            },
+            timeout: 10000
+        };
+        const req = https.request(options, (res) => {
+            let data = '';
+            res.on('data', (chunk) => data += chunk.toString());
+            res.on('end', () => {
+                try {
+                    const parsed = JSON.parse(data);
+                    resolve(parsed.status === 'sent');
+                }
+                catch {
+                    resolve(false);
+                }
+            });
+        });
+        req.on('error', () => resolve(false));
+        req.on('timeout', () => {
+            req.destroy();
+            resolve(false);
+        });
+        req.write(body);
+        req.end();
+    });
+}
+async function getApiKey(context) {
+    return await context.secrets.get('geminiApiKey');
+}
+function deactivate() { }
+
+
+/***/ }),
+/* 1 */
+/***/ ((module) => {
+
+module.exports = require("vscode");
+
+/***/ }),
+/* 2 */
+/***/ ((module) => {
+
+module.exports = require("https");
+
+/***/ }),
+/* 3 */
+/***/ ((module) => {
+
+module.exports = require("crypto");
+
+/***/ }),
+/* 4 */
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.SidebarPanel = void 0;
+const vscode = __importStar(__webpack_require__(1));
+const path = __importStar(__webpack_require__(5));
+const fs = __importStar(__webpack_require__(6));
+const https = __importStar(__webpack_require__(2));
+const extension_1 = __webpack_require__(0);
+const IGNORE_DIRS = new Set([
+    '.git', '__pycache__', 'venv', 'node_modules',
+    'chroma_db', 'dist', '.next', 'build', 'out', '.cache'
+]);
+const MAX_HISTORY = 20;
+const MAX_FILE_SIZE = 50000;
+class SidebarPanel {
+    _view;
+    _context;
+    _extensionUri;
+    constructor(extensionUri, context) {
+        this._extensionUri = extensionUri;
+        this._context = context;
+    }
+    refresh() {
+        if (this._view) {
+            this._updateView();
+        }
+    }
+    async _updateView() {
+        const apiKey = await (0, extension_1.getApiKey)(this._context);
+        if (apiKey) {
+            this._view?.webview.postMessage({ command: 'showMain' });
+            const channelId = (0, extension_1.getChannelId)(apiKey);
+            this._checkBrowserConnection(channelId);
+        }
+        else {
+            this._view?.webview.postMessage({ command: 'showSetup' });
+        }
+    }
+    resolveWebviewView(webviewView, _context, _token) {
+        this._view = webviewView;
+        webviewView.webview.options = { enableScripts: true };
+        webviewView.webview.html = this._getHtml();
+        webviewView.webview.onDidReceiveMessage(async (message) => {
+            switch (message.command) {
+                case 'saveApiKey':
+                    await this._context.secrets.store('geminiApiKey', message.key);
+                    vscode.window.showInformationMessage('PromptPilot: API key saved.');
+                    this._view?.webview.postMessage({ command: 'showMain' });
+                    const newApiKey = message.key;
+                    const newChannelId = (0, extension_1.getChannelId)(newApiKey);
+                    this._checkBrowserConnection(newChannelId);
+                    break;
+                case 'engineerPrompt':
+                    await this._runBackend(message.userPrompt, message.currentFile, message.attachments || []);
+                    break;
+                case 'sendToIDE':
+                    await (0, extension_1.sendToIDEOnly)(message.refinedPrompt);
+                    break;
+                case 'sendToBrowser':
+                    const apiKey = await (0, extension_1.getApiKey)(this._context) || '';
+                    await (0, extension_1.sendToBrowserOnly)(message.refinedPrompt, apiKey);
+                    break;
+                case 'copyPrompt':
+                    await vscode.env.clipboard.writeText(message.refinedPrompt);
+                    vscode.window.showInformationMessage('PromptPilot: Prompt copied to clipboard.');
+                    break;
+                case 'reindex':
+                    vscode.window.showInformationMessage('PromptPilot: Project files are read automatically with each prompt.');
+                    this._view?.webview.postMessage({ command: 'indexingDone' });
+                    break;
+                case 'getCurrentFile':
+                    this._sendCurrentFile();
+                    break;
+                case 'checkApiKey':
+                    await this._updateView();
+                    break;
+                case 'clearApiKey':
+                    await this._context.secrets.delete('geminiApiKey');
+                    this._view?.webview.postMessage({ command: 'showSetup' });
+                    vscode.window.showInformationMessage('PromptPilot: API key cleared.');
+                    break;
+                case 'openInstallPage':
+                    vscode.env.openExternal(vscode.Uri.parse(extension_1.BROWSER_EXTENSION_URL));
+                    break;
+                case 'checkBrowserConnection':
+                    const key = await (0, extension_1.getApiKey)(this._context);
+                    if (key) {
+                        this._checkBrowserConnection((0, extension_1.getChannelId)(key));
+                    }
+                    break;
+            }
+        });
+        this._sendCurrentFile();
+        this._updateView();
+    }
+    _sendCurrentFile() {
+        const editor = vscode.window.activeTextEditor;
+        const currentFile = editor
+            ? path.basename(editor.document.fileName)
+            : 'No file open';
+        this._view?.webview.postMessage({ command: 'currentFile', file: currentFile });
+    }
+    _getWorkspacePath() {
+        const folders = vscode.workspace.workspaceFolders;
+        return folders ? folders[0].uri.fsPath : null;
+    }
+    _getProjectStructure(rootDir) {
+        const lines = [];
+        const walk = (dir, level) => {
+            if (level > 4)
+                return;
+            try {
+                const entries = fs.readdirSync(dir, { withFileTypes: true });
+                for (const entry of entries) {
+                    if (IGNORE_DIRS.has(entry.name) || entry.name.startsWith('.'))
+                        continue;
+                    const indent = '  '.repeat(level);
+                    if (entry.isDirectory()) {
+                        lines.push(`${indent}${entry.name}/`);
+                        walk(path.join(dir, entry.name), level + 1);
+                    }
+                    else {
+                        lines.push(`${indent}${entry.name}`);
+                    }
+                }
+            }
+            catch { }
+        };
+        lines.push(path.basename(rootDir) + '/');
+        walk(rootDir, 1);
+        return lines.join('\n');
+    }
+    _readFileContent(filePath) {
+        try {
+            const stat = fs.statSync(filePath);
+            if (stat.size > MAX_FILE_SIZE) {
+                return `[File too large — ${Math.round(stat.size / 1024)}KB]`;
+            }
+            return fs.readFileSync(filePath, 'utf8');
+        }
+        catch {
+            return '[Could not read file]';
+        }
+    }
+    _buildContext(currentFile) {
+        const workspacePath = this._getWorkspacePath();
+        if (!workspacePath)
+            return '';
+        const parts = [];
+        try {
+            const structure = this._getProjectStructure(workspacePath);
+            parts.push(`--- Project Structure ---\n${structure}`);
+        }
+        catch { }
+        const configFiles = [
+            'package.json', 'requirements.txt', 'pyproject.toml',
+            'Pipfile', 'tsconfig.json', 'pom.xml', 'build.gradle'
+        ];
+        for (const config of configFiles) {
+            const configPath = path.join(workspacePath, config);
+            if (fs.existsSync(configPath)) {
+                const content = this._readFileContent(configPath);
+                parts.push(`--- ${config} ---\n${content}`);
+            }
+        }
+        const editor = vscode.window.activeTextEditor;
+        if (editor) {
+            const content = editor.document.getText();
+            if (content.length <= MAX_FILE_SIZE) {
+                parts.push(`--- ${currentFile} (current file) ---\n${content}`);
+            }
+        }
+        else if (currentFile !== 'No file open') {
+            const fullPath = path.join(workspacePath, currentFile);
+            if (fs.existsSync(fullPath)) {
+                const content = this._readFileContent(fullPath);
+                parts.push(`--- ${currentFile} (current file) ---\n${content}`);
+            }
+        }
+        return parts.join('\n\n');
+    }
+    _getHistoryKey(currentFile) {
+        return `pp_history_${currentFile.replace(/[^a-zA-Z0-9]/g, '_')}`;
+    }
+    _loadHistory(currentFile) {
+        const key = this._getHistoryKey(currentFile);
+        return this._context.globalState.get(key, []);
+    }
+    async _saveHistory(currentFile, history) {
+        const key = this._getHistoryKey(currentFile);
+        await this._context.globalState.update(key, history.slice(-MAX_HISTORY));
+    }
+    _buildHistoryContext(currentFile) {
+        const history = this._loadHistory(currentFile);
+        if (history.length === 0)
+            return '';
+        return history.slice(-5).map(h => `[${h.timestamp}]\nDeveloper typed: ${h.prompt}\nRefined output: ${h.refined}`).join('\n\n');
+    }
+    _checkBrowserConnection(channelId) {
+        const body = JSON.stringify({ channel_id: channelId, prompt: '__ping__' });
+        const options = {
+            hostname: 'promptpilot-api.onrender.com',
+            path: '/send',
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Content-Length': Buffer.byteLength(body)
+            },
+            timeout: 8000
+        };
+        const req = https.request(options, (res) => {
+            let data = '';
+            res.on('data', (chunk) => data += chunk.toString());
+            res.on('end', () => {
+                try {
+                    const parsed = JSON.parse(data);
+                    const connected = parsed.status === 'sent';
+                    this._view?.webview.postMessage({ command: 'browserStatus', connected });
+                }
+                catch {
+                    this._view?.webview.postMessage({ command: 'browserStatus', connected: false });
+                }
+            });
+        });
+        req.on('error', () => {
+            this._view?.webview.postMessage({ command: 'browserStatus', connected: false });
+        });
+        req.write(body);
+        req.end();
+    }
+    _postToServer(body) {
+        return new Promise((resolve, reject) => {
+            const data = JSON.stringify(body);
+            const serverUrl = new URL(extension_1.SERVER_URL);
+            const options = {
+                hostname: serverUrl.hostname,
+                path: '/engineer',
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Content-Length': Buffer.byteLength(data)
+                },
+                timeout: 120000
+            };
+            const req = https.request(options, (res) => {
+                let responseData = '';
+                res.on('data', (chunk) => responseData += chunk.toString());
+                res.on('end', () => {
+                    try {
+                        const parsed = JSON.parse(responseData);
+                        if (res.statusCode && res.statusCode >= 400) {
+                            reject(new Error(parsed.detail || `Server error ${res.statusCode}`));
+                        }
+                        else {
+                            resolve(parsed);
+                        }
+                    }
+                    catch (e) {
+                        reject(new Error('Failed to parse server response'));
+                    }
+                });
+            });
+            req.on('error', reject);
+            req.on('timeout', () => {
+                req.destroy();
+                reject(new Error('timeout'));
+            });
+            req.write(data);
+            req.end();
+        });
+    }
+    async _runBackend(userPrompt, currentFile, attachments = []) {
+        const apiKey = await (0, extension_1.getApiKey)(this._context);
+        if (!apiKey) {
+            this._view?.webview.postMessage({
+                command: 'error',
+                message: 'No API key found. Please enter your Gemini API key.'
+            });
+            this._view?.webview.postMessage({ command: 'showSetup' });
+            return;
+        }
+        this._view?.webview.postMessage({ command: 'loading' });
+        try {
+            const context = this._buildContext(currentFile);
+            const history = this._buildHistoryContext(currentFile);
+            const response = await this._postToServer({
+                user_prompt: userPrompt,
+                api_key: apiKey,
+                context,
+                history,
+                attachments
+            });
+            const refined = response.refined_prompt;
+            if (!refined)
+                throw new Error('Server returned empty response');
+            this._view?.webview.postMessage({
+                command: 'refinedPrompt',
+                prompt: refined
+            });
+            // Check browser connection status
+            const channelId = (0, extension_1.getChannelId)(apiKey);
+            this._checkBrowserConnection(channelId);
+            // Save to session memory
+            const existingHistory = this._loadHistory(currentFile);
+            existingHistory.push({
+                prompt: userPrompt,
+                refined,
+                timestamp: new Date().toISOString()
+            });
+            await this._saveHistory(currentFile, existingHistory);
+        }
+        catch (error) {
+            const msg = error.message || 'Unknown error';
+            if (msg.includes('timeout') || msg.includes('ECONNREFUSED') || msg.includes('socket hang up')) {
+                this._view?.webview.postMessage({
+                    command: 'error',
+                    message: 'Server is waking up — this takes about 30 seconds on the free tier. Please try again shortly.'
+                });
+            }
+            else {
+                this._view?.webview.postMessage({ command: 'error', message: msg });
+            }
+        }
+    }
+    _getHtml() {
+        return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PromptPilot</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+        :root {
+            --accent: #3b82f6;
+            --accent-hover: #2563eb;
+            --accent-subtle: rgba(59, 130, 246, 0.1);
+            --accent-border: rgba(59, 130, 246, 0.25);
+            --surface-1: rgba(255, 255, 255, 0.04);
+            --surface-2: rgba(255, 255, 255, 0.07);
+            --border: rgba(255, 255, 255, 0.08);
+            --border-strong: rgba(255, 255, 255, 0.14);
+            --text-primary: rgba(255, 255, 255, 0.92);
+            --text-secondary: rgba(255, 255, 255, 0.55);
+            --text-muted: rgba(255, 255, 255, 0.32);
+            --success: #10b981;
+            --success-subtle: rgba(16, 185, 129, 0.1);
+            --danger: #ef4444;
+            --danger-subtle: rgba(239, 68, 68, 0.1);
+            --warning: #f59e0b;
+            --radius-sm: 5px;
+            --radius: 7px;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body { width: 100%; height: 100%; }
+
+        body {
+            font-family: 'Inter', var(--vscode-font-family), system-ui, sans-serif;
+            font-size: 12px;
+            color: var(--text-primary);
+            background: var(--vscode-sideBar-background);
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        .header {
+            padding: 12px 14px 10px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-shrink: 0;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-width: 0;
+        }
+
+        .logo-mark {
+            width: 20px;
+            height: 20px;
+            background: var(--accent);
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .logo-mark svg { width: 11px; height: 11px; fill: white; }
+
+        .logo-text {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-primary);
+            letter-spacing: -0.2px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .header-badge {
+            font-size: 9px;
+            font-weight: 500;
+            color: var(--accent);
+            background: var(--accent-subtle);
+            border: 1px solid var(--accent-border);
+            padding: 1px 6px;
+            border-radius: 20px;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        .label {
+            font-size: 10px;
+            font-weight: 500;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            margin-bottom: 5px;
+        }
+
+        .file-row {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            padding: 7px 10px;
+            background: var(--surface-1);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            min-width: 0;
+        }
+
+        .file-indicator {
+            width: 5px;
+            height: 5px;
+            border-radius: 50%;
+            background: var(--success);
+            flex-shrink: 0;
+        }
+
+        .file-label { font-size: 10px; color: var(--text-muted); flex-shrink: 0; }
+
+        .file-name {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: var(--text-primary);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            min-width: 0;
+            flex: 1;
+        }
+
+        /* Browser status row */
+        .browser-status-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 5px 10px;
+            background: var(--surface-1);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            font-size: 10px;
+            color: var(--text-muted);
+            cursor: default;
+        }
+
+        .browser-dot {
+            width: 5px;
+            height: 5px;
+            border-radius: 50%;
+            background: var(--text-muted);
+            flex-shrink: 0;
+            transition: background 0.2s;
+        }
+
+        .browser-dot.connected { background: var(--success); }
+        .browser-dot.disconnected { background: var(--warning); }
+
+        .browser-status-text { flex: 1; }
+
+        .browser-install-link {
+            color: var(--accent);
+            font-size: 10px;
+            text-decoration: none;
+            cursor: pointer;
+            background: none;
+            border: none;
+            padding: 0;
+            font-family: inherit;
+        }
+
+        .browser-install-link:hover { text-decoration: underline; }
+
+        textarea, input[type="password"], input[type="text"] {
+            width: 100%;
+            background: var(--surface-1);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 8px 10px;
+            font-family: 'Inter', var(--vscode-font-family), system-ui, sans-serif;
+            font-size: 12px;
+            outline: none;
+            transition: border-color 0.15s, background 0.15s;
+            resize: vertical;
+            line-height: 1.5;
+        }
+
+        textarea { min-height: 70px; }
+
+        textarea:focus, input:focus {
+            border-color: var(--accent-border);
+            background: var(--surface-2);
+        }
+
+        textarea::placeholder, input::placeholder { color: var(--text-muted); }
+
+        .upload-area {
+            border: 1px dashed var(--border-strong);
+            border-radius: var(--radius);
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            cursor: pointer;
+            transition: border-color 0.15s, background 0.15s;
+            position: relative;
+        }
+
+        .upload-area:hover, .upload-area.drag-over {
+            border-color: var(--accent-border);
+            background: var(--accent-subtle);
+        }
+
+        .upload-area input[type="file"] {
+            position: absolute;
+            inset: 0;
+            opacity: 0;
+            cursor: pointer;
+            width: 100%;
+            height: 100%;
+            padding: 0;
+            border: none;
+            background: none;
+        }
+
+        .upload-hint {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            color: var(--text-muted);
+            font-size: 11px;
+            pointer-events: none;
+        }
+
+        .upload-types { font-size: 10px; color: var(--text-muted); pointer-events: none; }
+
+        .attachments-list { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+
+        .attachment-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 5px 8px;
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+        }
+
+        .attachment-name {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            color: var(--text-secondary);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+        }
+
+        .attachment-remove {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            padding: 0 2px;
+            font-size: 14px;
+            line-height: 1;
+            width: auto;
+        }
+
+        .attachment-remove:hover { color: var(--danger); }
+
+        .btn {
+            width: 100%;
+            padding: 7px 12px;
+            border: none;
+            border-radius: var(--radius);
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 500;
+            font-family: 'Inter', var(--vscode-font-family), system-ui, sans-serif;
+            transition: all 0.15s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+        }
+
+        .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none !important; }
+
+        .btn-primary { background: var(--accent); color: white; }
+        .btn-primary:not(:disabled):hover { background: var(--accent-hover); transform: translateY(-1px); }
+
+        .btn-ghost {
+            background: var(--surface-1);
+            color: var(--text-secondary);
+            border: 1px solid var(--border);
+        }
+        .btn-ghost:not(:disabled):hover {
+            background: var(--surface-2);
+            border-color: var(--border-strong);
+            color: var(--text-primary);
+        }
+
+        .btn-success { background: var(--success); color: white; }
+        .btn-success:not(:disabled):hover { background: #059669; transform: translateY(-1px); }
+
+        /* IDE button — distinct teal colour */
+        .btn-ide {
+            background: #0d9488;
+            color: white;
+        }
+        .btn-ide:not(:disabled):hover { background: #0f766e; transform: translateY(-1px); }
+
+        .btn-neutral {
+            background: var(--surface-2);
+            color: var(--text-secondary);
+            border: 1px solid var(--border-strong);
+        }
+        .btn-neutral:not(:disabled):hover { background: rgba(255,255,255,0.1); color: var(--text-primary); }
+
+        .btn-danger {
+            background: var(--danger-subtle);
+            color: var(--danger);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+        }
+        .btn-danger:not(:disabled):hover { background: rgba(239, 68, 68, 0.18); }
+
+        .btn-link {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            font-size: 11px;
+            cursor: pointer;
+            padding: 0;
+            font-family: inherit;
+            text-decoration: underline;
+            text-underline-offset: 2px;
+            width: auto;
+        }
+        .btn-link:hover { color: var(--text-secondary); }
+
+        .btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+        .btn-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px; }
+
+        .divider { height: 1px; background: var(--border); flex-shrink: 0; }
+
+        .section-label-small {
+            font-size: 9px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-muted);
+            text-align: center;
+            margin-bottom: 4px;
+        }
+
+        .status {
+            display: none;
+            align-items: center;
+            gap: 7px;
+            padding: 7px 10px;
+            border-radius: var(--radius);
+            font-size: 11px;
+            line-height: 1.4;
+        }
+        .status.loading { background: var(--accent-subtle); border: 1px solid var(--accent-border); color: var(--accent); }
+        .status.error { background: var(--danger-subtle); border: 1px solid rgba(239,68,68,0.2); color: var(--danger); }
+        .status.success { background: var(--success-subtle); border: 1px solid rgba(16,185,129,0.2); color: var(--success); }
+
+        .spinner {
+            width: 11px; height: 11px;
+            border: 1.5px solid currentColor;
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+            flex-shrink: 0; opacity: 0.7;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .output-card {
+            background: var(--surface-1);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            overflow: hidden;
+            animation: fadeUp 0.2s ease;
+        }
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+        .output-card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 6px 10px;
+            border-bottom: 1px solid var(--border);
+            background: var(--surface-2);
+        }
+        .output-card-title { font-size: 10px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; }
+        .output-card-tag { font-size: 9px; color: var(--accent); background: var(--accent-subtle); padding: 1px 6px; border-radius: 3px; font-weight: 500; }
+
+        .output-card-body {
+            padding: 10px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            line-height: 1.65;
+            color: var(--text-primary);
+            white-space: pre-wrap;
+            word-break: break-word;
+            max-height: 200px;
+            overflow-y: auto;
+            scrollbar-width: thin;
+            scrollbar-color: var(--border-strong) transparent;
+        }
+        .output-card-body::-webkit-scrollbar { width: 3px; }
+        .output-card-body::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 2px; }
+
+        #setup-screen { display: none; flex-direction: column; flex: 1; }
+        .setup-body { padding: 16px 14px; display: flex; flex-direction: column; gap: 14px; flex: 1; }
+        .setup-intro { display: flex; flex-direction: column; gap: 4px; }
+        .setup-title { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+        .setup-desc { font-size: 11px; color: var(--text-secondary); line-height: 1.5; }
+        .setup-desc a { color: var(--accent); text-decoration: none; }
+        .setup-desc a:hover { text-decoration: underline; }
+        .steps { display: flex; flex-direction: column; gap: 8px; }
+        .steps-title { font-size: 10px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 2px; }
+        .step { display: flex; align-items: flex-start; gap: 8px; }
+        .step-num { width: 16px; height: 16px; border-radius: 50%; background: var(--surface-2); border: 1px solid var(--border-strong); font-size: 9px; font-weight: 600; color: var(--text-secondary); display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
+        .step-text { font-size: 11px; color: var(--text-secondary); line-height: 1.5; }
+        .step-text a { color: var(--accent); text-decoration: none; }
+        .step-text a:hover { text-decoration: underline; }
+        .step-text code { font-family: 'JetBrains Mono', monospace; font-size: 10px; background: var(--surface-2); border: 1px solid var(--border); padding: 0 4px; border-radius: 3px; color: var(--text-primary); }
+        .secure-note { font-size: 10px; color: var(--text-muted); display: flex; align-items: center; gap: 5px; }
+
+        #main-screen { display: none; flex-direction: column; flex: 1; }
+        .main-body { padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; flex: 1; }
+        #refined-section { display: none; flex-direction: column; gap: 8px; animation: fadeUp 0.2s ease; }
+        #edit-area { display: none; }
+        .bottom-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 2px; }
+        .bottom-bar .btn-ghost { width: auto; padding: 5px 10px; font-size: 11px; }
+    </style>
+</head>
+<body>
+
+    <!-- Header -->
+    <div class="header">
+        <div class="header-left">
+            <div class="logo-mark">
+                <svg viewBox="0 0 12 12" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M7 1L2 7h4l-1 4 5-6H6l1-4z"/>
+                </svg>
+            </div>
+            <span class="logo-text">PromptPilot</span>
+        </div>
+        <span class="header-badge">AI</span>
+    </div>
+
+    <!-- Setup Screen -->
+    <div id="setup-screen">
+        <div class="setup-body">
+            <div class="setup-intro">
+                <div class="setup-title">Connect your API key</div>
+                <div class="setup-desc">
+                    PromptPilot uses the Gemini API to engineer your prompts.
+                    Get a free key — no credit card required.
+                </div>
+            </div>
+
+            <div class="steps">
+                <div class="steps-title">How to get your key</div>
+                <div class="step">
+                    <div class="step-num">1</div>
+                    <div class="step-text">Go to <a href="https://aistudio.google.com" target="_blank">aistudio.google.com</a> and sign in with your Google account</div>
+                </div>
+                <div class="step">
+                    <div class="step-num">2</div>
+                    <div class="step-text">Click <strong>Get API key</strong> then <strong>Create API key</strong></div>
+                </div>
+                <div class="step">
+                    <div class="step-num">3</div>
+                    <div class="step-text">Copy the key — it starts with <code>AIza</code></div>
+                </div>
+                <div class="step">
+                    <div class="step-num">4</div>
+                    <div class="step-text">Paste it below and click Save</div>
+                </div>
+            </div>
+
+            <div>
+                <div class="label">Gemini API Key</div>
+                <input type="password" id="api-key-input" placeholder="AIzaSy..." />
+            </div>
+
+            <button class="btn btn-primary" id="save-key-btn">Save &amp; Connect</button>
+
+            <div class="secure-note">
+                <svg width="10" height="10" viewBox="0 0 12 12" fill="currentColor">
+                    <path d="M6 1C4.3 1 3 2.3 3 4v1H2v6h8V5H9V4C9 2.3 7.7 1 6 1zm0 1.5c.8 0 1.5.7 1.5 1.5v1h-3V4C4.5 3.2 5.2 2.5 6 2.5zM6 7c.6 0 1 .4 1 1s-.4 1-1 1-1-.4-1-1 .4-1 1-1z"/>
+                </svg>
+                Stored securely in VS Code's encrypted secret storage
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Screen -->
+    <div id="main-screen">
+        <div class="main-body">
+
+            <!-- Current file -->
+            <div class="file-row">
+                <div class="file-indicator"></div>
+                <span class="file-label">Working on</span>
+                <span class="file-name" id="current-file">Detecting...</span>
+            </div>
+
+            <!-- Browser connection status -->
+            <div class="browser-status-row" id="browser-status-row" style="display:none">
+                <div class="browser-dot" id="browser-dot"></div>
+                <span class="browser-status-text" id="browser-status-text">Checking browser...</span>
+                <button class="browser-install-link" id="install-browser-btn" style="display:none">
+                    Install extension
+                </button>
+            </div>
+
+            <!-- Prompt input -->
+            <div>
+                <div class="label">Your Prompt</div>
+                <textarea id="user-prompt" placeholder="Describe what you want... e.g. fix the auth bug, make a DBMS project, add error handling"></textarea>
+            </div>
+
+            <!-- Attachments -->
+            <div>
+                <div class="label">Attachments <span style="color:var(--text-muted);font-size:9px;text-transform:none;letter-spacing:0">(optional — images, PDFs, Word docs)</span></div>
+                <div class="upload-area" id="upload-area">
+                    <input type="file" id="file-input" multiple accept="image/*,.pdf,.doc,.docx,.txt" />
+                    <div class="upload-hint">
+                        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M6 1v7M3 4l3-3 3 3M1 9v1a1 1 0 001 1h8a1 1 0 001-1V9"/>
+                        </svg>
+                        Click to upload or drag and drop
+                    </div>
+                    <div class="upload-types">Images, PDF, Word, TXT — up to 5 files</div>
+                </div>
+                <div class="attachments-list" id="attachments-list" style="display:none"></div>
+            </div>
+
+            <button class="btn btn-primary" id="engineer-btn">Engineer Prompt</button>
+
+            <div class="status" id="status">
+                <div class="spinner" id="status-spinner" style="display:none"></div>
+                <span id="status-text"></span>
+            </div>
+
+            <!-- Refined output -->
+            <div id="refined-section">
+                <div class="output-card">
+                    <div class="output-card-header">
+                        <span class="output-card-title">Refined Prompt</span>
+                        <span class="output-card-tag">Enhanced</span>
+                    </div>
+                    <div class="output-card-body" id="refined-output"></div>
+                </div>
+
+                <textarea id="edit-area" placeholder="Edit the refined prompt..."></textarea>
+
+                <!-- Send actions -->
+                <div class="section-label-small">Send to</div>
+                <div class="btn-row">
+                    <button class="btn btn-success" id="send-browser-btn" title="Send to AI tool open in your browser (Claude, ChatGPT, Gemini, Perplexity)">
+                        Browser Agent
+                    </button>
+                    <button class="btn btn-ide" id="send-ide-btn" title="Send to AI agent inside this IDE (Cursor, Copilot, Antigravity)">
+                        IDE Agent
+                    </button>
+                </div>
+
+                <!-- Secondary actions -->
+                <div class="btn-row">
+                    <button class="btn btn-neutral" id="copy-btn">Copy</button>
+                    <button class="btn btn-ghost" id="edit-btn">Edit</button>
+                </div>
+
+                <button class="btn btn-danger" id="reject-btn">Reject — Try Again</button>
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="bottom-bar">
+                <button class="btn btn-ghost" id="reindex-btn">Re-index Project</button>
+                <button class="btn-link" id="change-key-btn">Change key</button>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        const vscode = acquireVsCodeApi();
+        let currentFile = '';
+        let refinedPrompt = '';
+        let isEditing = false;
+        let attachments = [];
+
+        vscode.postMessage({ command: 'checkApiKey' });
+        vscode.postMessage({ command: 'getCurrentFile' });
+
+        // Setup
+        document.getElementById('save-key-btn').addEventListener('click', () => {
+            const key = document.getElementById('api-key-input').value.trim();
+            if (!key) return;
+            vscode.postMessage({ command: 'saveApiKey', key });
+        });
+
+        document.getElementById('api-key-input').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') document.getElementById('save-key-btn').click();
+        });
+
+        document.getElementById('change-key-btn').addEventListener('click', () => {
+            vscode.postMessage({ command: 'clearApiKey' });
+        });
+
+        // Install browser extension link
+        document.getElementById('install-browser-btn').addEventListener('click', () => {
+            vscode.postMessage({ command: 'openInstallPage' });
+        });
+
+        // File upload
+        const fileInput = document.getElementById('file-input');
+        const uploadArea = document.getElementById('upload-area');
+
+        fileInput.addEventListener('change', (e) => { handleFiles(e.target.files); });
+
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('drag-over');
+        });
+
+        uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('drag-over'));
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('drag-over');
+            handleFiles(e.dataTransfer.files);
+        });
+
+        function handleFiles(files) {
+            const allowedTypes = [
+                'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+                'application/pdf', 'application/msword',
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                'text/plain'
+            ];
+            Array.from(files).slice(0, 5 - attachments.length).forEach(file => {
+                if (!allowedTypes.includes(file.type)) return;
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    attachments.push({ name: file.name, mimeType: file.type, data: e.target.result.split(',')[1] });
+                    renderAttachments();
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+
+        function getFileIcon(mimeType) {
+            if (mimeType.startsWith('image/')) return '🖼';
+            if (mimeType === 'application/pdf') return '📄';
+            if (mimeType.includes('word')) return '📝';
+            return '📎';
+        }
+
+        function renderAttachments() {
+            const list = document.getElementById('attachments-list');
+            if (attachments.length === 0) { list.style.display = 'none'; return; }
+            list.style.display = 'flex';
+            list.innerHTML = attachments.map((a, i) =>
+                '<div class="attachment-item">' +
+                '<span style="font-size:12px;flex-shrink:0">' + getFileIcon(a.mimeType) + '</span>' +
+                '<span class="attachment-name">' + a.name + '</span>' +
+                '<button class="attachment-remove" onclick="removeAttachment(' + i + ')">×</button>' +
+                '</div>'
+            ).join('');
+        }
+
+        function removeAttachment(index) {
+            attachments.splice(index, 1);
+            renderAttachments();
+        }
+
+        // Engineer prompt
+        document.getElementById('engineer-btn').addEventListener('click', () => {
+            const prompt = document.getElementById('user-prompt').value.trim();
+            if (!prompt) { showStatus('Please enter a prompt first.', 'error', false); return; }
+            document.getElementById('engineer-btn').disabled = true;
+            document.getElementById('refined-section').style.display = 'none';
+            showStatus('Engineering your prompt...', 'loading', true);
+            vscode.postMessage({ command: 'engineerPrompt', userPrompt: prompt, currentFile, attachments });
+        });
+
+        // Send to browser agent only
+        document.getElementById('send-browser-btn').addEventListener('click', () => {
+            const text = isEditing ? document.getElementById('edit-area').value : refinedPrompt;
+            vscode.postMessage({ command: 'sendToBrowser', refinedPrompt: text });
+            setTimeout(() => resetAfterSend(), 400);
+        });
+
+        // Send to IDE agent only
+        document.getElementById('send-ide-btn').addEventListener('click', () => {
+            const text = isEditing ? document.getElementById('edit-area').value : refinedPrompt;
+            vscode.postMessage({ command: 'sendToIDE', refinedPrompt: text });
+            setTimeout(() => resetAfterSend(), 400);
+        });
+
+        // Copy
+        document.getElementById('copy-btn').addEventListener('click', () => {
+            const text = isEditing ? document.getElementById('edit-area').value : refinedPrompt;
+            vscode.postMessage({ command: 'copyPrompt', refinedPrompt: text });
+        });
+
+        // Edit
+        document.getElementById('edit-btn').addEventListener('click', () => {
+            const editArea = document.getElementById('edit-area');
+            if (!isEditing) {
+                editArea.value = refinedPrompt;
+                editArea.style.display = 'block';
+                document.getElementById('edit-btn').textContent = 'Done';
+                isEditing = true;
+            } else {
+                editArea.style.display = 'none';
+                document.getElementById('edit-btn').textContent = 'Edit';
+                isEditing = false;
+            }
+        });
+
+        // Reject
+        document.getElementById('reject-btn').addEventListener('click', () => {
+            document.getElementById('refined-section').style.display = 'none';
+            document.getElementById('edit-area').style.display = 'none';
+            document.getElementById('user-prompt').value = '';
+            document.getElementById('user-prompt').focus();
+            isEditing = false;
+            hideStatus();
+        });
+
+        // Re-index
+        document.getElementById('reindex-btn').addEventListener('click', () => {
+            vscode.postMessage({ command: 'reindex' });
+        });
+
+        function resetAfterSend() {
+            document.getElementById('user-prompt').value = '';
+            document.getElementById('refined-section').style.display = 'none';
+            document.getElementById('edit-area').style.display = 'none';
+            attachments = [];
+            renderAttachments();
+            isEditing = false;
+            hideStatus();
+        }
+
+        window.addEventListener('message', (event) => {
+            const message = event.data;
+            switch (message.command) {
+                case 'showSetup':
+                    document.getElementById('setup-screen').style.display = 'flex';
+                    document.getElementById('main-screen').style.display = 'none';
+                    break;
+                case 'showMain':
+                    document.getElementById('setup-screen').style.display = 'none';
+                    document.getElementById('main-screen').style.display = 'flex';
+                    // Check browser connection when main screen shows
+                    vscode.postMessage({ command: 'checkBrowserConnection' });
+                    break;
+                case 'currentFile':
+                    currentFile = message.file;
+                    document.getElementById('current-file').textContent = message.file;
+                    break;
+                case 'loading':
+                    showStatus('Engineering your prompt...', 'loading', true);
+                    break;
+                case 'refinedPrompt':
+                    refinedPrompt = message.prompt;
+                    document.getElementById('refined-output').textContent = message.prompt;
+                    document.getElementById('refined-section').style.display = 'flex';
+                    document.getElementById('engineer-btn').disabled = false;
+                    hideStatus();
+                    break;
+                case 'error':
+                    showStatus(message.message, 'error', false);
+                    document.getElementById('engineer-btn').disabled = false;
+                    break;
+                case 'indexingDone':
+                    showStatus('Project files read automatically each time.', 'success', false);
+                    setTimeout(hideStatus, 3000);
+                    break;
+                case 'browserStatus':
+                    const browserRow = document.getElementById('browser-status-row');
+                    const browserDot = document.getElementById('browser-dot');
+                    const browserText = document.getElementById('browser-status-text');
+                    const installBtn = document.getElementById('install-browser-btn');
+                    const sendBrowserBtn = document.getElementById('send-browser-btn');
+
+                    browserRow.style.display = 'flex';
+
+                    if (message.connected) {
+                        browserDot.className = 'browser-dot connected';
+                        browserText.textContent = 'Browser extension connected';
+                        installBtn.style.display = 'none';
+                        sendBrowserBtn.disabled = false;
+                        sendBrowserBtn.title = 'Send to AI tool open in your browser';
+                    } else {
+                        browserDot.className = 'browser-dot disconnected';
+                        browserText.textContent = 'Browser extension not connected';
+                        installBtn.style.display = 'block';
+                        sendBrowserBtn.disabled = false;
+                        sendBrowserBtn.title = 'Browser extension not connected — click to install';
+                    }
+                    break;
+            }
+        });
+
+        function showStatus(msg, type, showSpinner) {
+            const el = document.getElementById('status');
+            const spinner = document.getElementById('status-spinner');
+            const text = document.getElementById('status-text');
+            el.className = 'status ' + type;
+            el.style.display = 'flex';
+            text.textContent = msg;
+            spinner.style.display = showSpinner ? 'block' : 'none';
+        }
+
+        function hideStatus() {
+            document.getElementById('status').style.display = 'none';
+        }
+    </script>
+</body>
+</html>`;
+    }
+}
+exports.SidebarPanel = SidebarPanel;
+
+
+/***/ }),
+/* 5 */
+/***/ ((module) => {
+
+module.exports = require("path");
+
+/***/ }),
+/* 6 */
+/***/ ((module) => {
+
+module.exports = require("fs");
+
+/***/ })
+/******/ 	]);
+/************************************************************************/
+/******/ 	// The module cache
+/******/ 	var __webpack_module_cache__ = {};
+/******/ 	
+/******/ 	// The require function
+/******/ 	function __webpack_require__(moduleId) {
+/******/ 		// Check if module is in cache
+/******/ 		var cachedModule = __webpack_module_cache__[moduleId];
+/******/ 		if (cachedModule !== undefined) {
+/******/ 			return cachedModule.exports;
+/******/ 		}
+/******/ 		// Create a new module (and put it into the cache)
+/******/ 		var module = __webpack_module_cache__[moduleId] = {
+/******/ 			// no module.id needed
+/******/ 			// no module.loaded needed
+/******/ 			exports: {}
+/******/ 		};
+/******/ 	
+/******/ 		// Execute the module function
+/******/ 		__webpack_modules__[moduleId].call(module.exports, module, module.exports, __webpack_require__);
+/******/ 	
+/******/ 		// Return the exports of the module
+/******/ 		return module.exports;
+/******/ 	}
+/******/ 	
+/************************************************************************/
+/******/ 	
+/******/ 	// startup
+/******/ 	// Load entry module and return exports
+/******/ 	// This entry module is referenced by other modules so it can't be inlined
+/******/ 	var __webpack_exports__ = __webpack_require__(0);
+/******/ 	module.exports = __webpack_exports__;
+/******/ 	
+/******/ })()
+;
+//# sourceMappingURL=extension.js.map

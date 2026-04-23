@@ -1,282 +1,237 @@
-// Selectors for each AI tool's input field
-const INPUT_SELECTORS = {
-    'claude.ai': [
-        'div[contenteditable="true"]',
-        '.ProseMirror',
-    ],
-    'chatgpt.com': [
-        '#prompt-textarea',
-        'div[contenteditable="true"]',
-    ],
-    'chat.openai.com': [
-        '#prompt-textarea',
-        'div[contenteditable="true"]',
-    ],
-    'gemini.google.com': [
-        'div[contenteditable="true"]',
-        '.ql-editor',
-    ],
-    'perplexity.ai': [
-        'textarea[placeholder]',
-        'div[contenteditable="true"]',
-    ]
-};
+// ── Universal input detector ──────────────────────────────────────────────────
+// Instead of hardcoded selectors that break on UI updates, we score every
+// input/contenteditable on the page and pick the best candidate.
+// This works even when sites redesign their UI.
 
-function getInputField() {
-    const hostname = window.location.hostname;
+function findBestInput() {
+    const candidates = [];
 
-    for (const [site, selectors] of Object.entries(INPUT_SELECTORS)) {
-        if (hostname.includes(site)) {
-            for (const selector of selectors) {
-                const el = document.querySelector(selector);
-                if (el) return el;
-            }
+    // Collect all possible input elements
+    const editables = document.querySelectorAll(
+        '[contenteditable="true"], textarea, input[type="text"]'
+    );
+
+    for (const el of editables) {
+        const score = scoreElement(el);
+        if (score > 0) {
+            candidates.push({ el, score });
         }
     }
 
-    // Fallback
-    const fallbacks = [
-        'div[contenteditable="true"]',
-        'textarea',
-    ];
-    for (const selector of fallbacks) {
-        const el = document.querySelector(selector);
-        if (el) return el;
-    }
+    // Sort by score descending — highest score = most likely chat input
+    candidates.sort((a, b) => b.score - a.score);
 
-    return null;
+    return candidates.length > 0 ? candidates[0].el : null;
 }
 
-function insertPrompt(prompt) {
-    const input = getInputField();
+function scoreElement(el) {
+    let score = 0;
 
-    if (!input) {
-        console.error('PromptPilot: Could not find input field on this page');
-        return false;
+    // Must be visible
+    const rect = el.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return 0;
+    if (rect.top < 0 || rect.bottom > window.innerHeight + 200) return 0;
+
+    const style = window.getComputedStyle(el);
+    if (style.display === 'none' || style.visibility === 'hidden') return 0;
+    if (style.opacity === '0') return 0;
+
+    // Size scoring — chat inputs are usually wide and near the bottom
+    if (rect.width > 300) score += 20;
+    if (rect.width > 500) score += 10;
+
+    // Position scoring — chat inputs are usually in the bottom half
+    const viewportHeight = window.innerHeight;
+    const elementCenter = rect.top + rect.height / 2;
+    if (elementCenter > viewportHeight * 0.5) score += 15;
+    if (elementCenter > viewportHeight * 0.7) score += 10;
+
+    // Element type scoring
+    if (el.tagName === 'TEXTAREA') score += 25;
+    if (el.getAttribute('contenteditable') === 'true') score += 20;
+
+    // Placeholder text hints
+    const placeholder = (
+        el.getAttribute('placeholder') ||
+        el.getAttribute('aria-placeholder') ||
+        el.getAttribute('data-placeholder') || ''
+    ).toLowerCase();
+
+    const chatHints = [
+        'message', 'prompt', 'ask', 'type', 'chat', 'send',
+        'question', 'help', 'write', 'input', 'talk'
+    ];
+
+    for (const hint of chatHints) {
+        if (placeholder.includes(hint)) {
+            score += 30;
+            break;
+        }
     }
 
-    input.focus();
+    // Aria label hints
+    const ariaLabel = (el.getAttribute('aria-label') || '').toLowerCase();
+    for (const hint of chatHints) {
+        if (ariaLabel.includes(hint)) {
+            score += 25;
+            break;
+        }
+    }
 
-    if (input.getAttribute('contenteditable') === 'true') {
-        // Clear existing content
-        input.innerHTML = '';
+    // Role hints
+    const role = el.getAttribute('role') || '';
+    if (role === 'textbox') score += 20;
 
-        // Insert text
-        document.execCommand('selectAll', false, null);
-        document.execCommand('insertText', false, prompt);
+    // ProseMirror editor (used by Claude, Notion, many modern apps)
+    if (el.classList.contains('ProseMirror')) score += 30;
 
-        // Trigger input events so the UI updates
-        input.dispatchEvent(new InputEvent('input', { bubbles: true, data: prompt }));
-        input.dispatchEvent(new Event('change', { bubbles: true }));
+    // Near the bottom of the page is a strong signal
+    const distanceFromBottom = viewportHeight - rect.bottom;
+    if (distanceFromBottom < 200) score += 20;
+    if (distanceFromBottom < 100) score += 15;
+
+    // Penalty for small inputs (likely search boxes or form fields)
+    if (rect.height < 30 && el.tagName !== 'TEXTAREA') score -= 20;
+
+    // Penalty for inputs that already have a lot of content (not empty chat box)
+    const content = el.textContent || el.value || '';
+    if (content.length > 500) score -= 15;
+
+    return score;
+}
+
+function insertIntoElement(el, text) {
+    el.focus();
+
+    if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT') {
+        // Standard textarea/input — use React-compatible setter
+        const proto = el.tagName === 'TEXTAREA'
+            ? window.HTMLTextAreaElement.prototype
+            : window.HTMLInputElement.prototype;
+
+        const nativeSetter = Object.getOwnPropertyDescriptor(proto, 'value').set;
+        nativeSetter.call(el, text);
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+        return el.value === text || el.value.includes(text);
 
     } else {
-        // Handle regular textareas
-        const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-            window.HTMLTextAreaElement.prototype, 'value'
-        ).set;
-        nativeInputValueSetter.call(input, prompt);
+        // contenteditable — try multiple approaches in order
 
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-        input.dispatchEvent(new Event('change', { bubbles: true }));
-    }
+        // Approach 1: execCommand (works in most cases)
+        el.innerHTML = '';
+        el.focus();
+        const execSuccess = document.execCommand('insertText', false, text);
+        if (execSuccess && el.textContent.trim()) return true;
 
-    // Visual confirmation — green outline flash
-    input.style.outline = '2px solid #2ea043';
-    setTimeout(() => {
-        input.style.outline = '';
-    }, 1500);
+        // Approach 2: ClipboardEvent paste simulation
+        el.innerHTML = '';
+        el.focus();
+        const dataTransfer = new DataTransfer();
+        dataTransfer.setData('text/plain', text);
+        const pasteEvent = new ClipboardEvent('paste', {
+            clipboardData: dataTransfer,
+            bubbles: true,
+            cancelable: true
+        });
+        el.dispatchEvent(pasteEvent);
+        if (el.textContent.trim()) return true;
 
-    return true;
-}
+        // Approach 3: Direct innerHTML with InputEvent
+        el.innerHTML = `<p>${text}</p>`;
+        el.dispatchEvent(new InputEvent('input', {
+            bubbles: true,
+            cancelable: true,
+            inputType: 'insertText',
+            data: text
+        }));
+        if (el.textContent.trim()) return true;
 
-// Listen for prompt injection messages from background script
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (message.type === 'insertPrompt') {
-        const success = insertPrompt(message.prompt);
-        sendResponse({ success });
-    }
-    return true;
-});
+        // Approach 4: Range and Selection API
+        el.innerHTML = '';
+        el.focus();
+        const range = document.createRange();
+        const sel = window.getSelection();
+        range.selectNodeContents(el);
+        range.collapse(false);
+        sel.removeAllRanges();
+        sel.addRange(range);
+        const textNode = document.createTextNode(text);
+        range.insertNode(textNode);
+        el.dispatchEvent(new InputEvent('input', { bubbles: true }));
+        if (el.textContent.trim()) return true;
 
-function insertPrompt(text) {
-    const host = window.location.hostname;
-
-    try {
-        if (host.includes('claude.ai')) {
-            return insertIntoClaude(text);
-        } else if (host.includes('chatgpt.com') || host.includes('chat.openai.com')) {
-            return insertIntoChatGPT(text);
-        } else if (host.includes('gemini.google.com')) {
-            return insertIntoGemini(text);
-        } else if (host.includes('perplexity.ai')) {
-            return insertIntoPerplexity(text);
-        }
-    } catch (e) {
-        console.error('PromptPilot: Error inserting prompt', e);
         return false;
     }
-
-    return false;
-}
-
-function insertIntoClaude(text) {
-    // Claude uses a contenteditable div with specific data attribute
-    const selectors = [
-        'div[contenteditable="true"].ProseMirror',
-        'div[contenteditable="true"][data-testid="chat-input"]',
-        'div[contenteditable="true"]',
-        'textarea'
-    ];
-
-    for (const selector of selectors) {
-        const el = document.querySelector(selector);
-        if (el) {
-            el.focus();
-
-            if (el.tagName === 'TEXTAREA') {
-                const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-                    window.HTMLTextAreaElement.prototype, 'value'
-                ).set;
-                nativeInputValueSetter.call(el, text);
-                el.dispatchEvent(new Event('input', { bubbles: true }));
-            } else {
-                // contenteditable — use execCommand for React compatibility
-                el.innerHTML = '';
-                el.focus();
-                document.execCommand('insertText', false, text);
-
-                // If execCommand didn't work, try clipboard approach
-                if (!el.textContent.trim()) {
-                    el.textContent = text;
-                    el.dispatchEvent(new InputEvent('input', { bubbles: true, data: text }));
-                }
-            }
-
-            flashBorder(el);
-            console.log('PromptPilot: Inserted into Claude');
-            return true;
-        }
-    }
-
-    console.log('PromptPilot: Could not find Claude input');
-    return false;
-}
-
-function insertIntoChatGPT(text) {
-    const selectors = [
-        'div#prompt-textarea[contenteditable="true"]',
-        'div[contenteditable="true"]',
-        'textarea[data-id="root"]',
-        'textarea'
-    ];
-
-    for (const selector of selectors) {
-        const el = document.querySelector(selector);
-        if (el) {
-            el.focus();
-
-            if (el.tagName === 'TEXTAREA') {
-                const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-                    window.HTMLTextAreaElement.prototype, 'value'
-                ).set;
-                nativeInputValueSetter.call(el, text);
-                el.dispatchEvent(new Event('input', { bubbles: true }));
-            } else {
-                el.innerHTML = '';
-                el.focus();
-                document.execCommand('insertText', false, text);
-
-                if (!el.textContent.trim()) {
-                    el.textContent = text;
-                    el.dispatchEvent(new InputEvent('input', { bubbles: true }));
-                }
-            }
-
-            flashBorder(el);
-            console.log('PromptPilot: Inserted into ChatGPT');
-            return true;
-        }
-    }
-
-    console.log('PromptPilot: Could not find ChatGPT input');
-    return false;
-}
-
-function insertIntoGemini(text) {
-    const selectors = [
-        'div.ql-editor[contenteditable="true"]',
-        'rich-textarea div[contenteditable="true"]',
-        'div[contenteditable="true"]',
-        'textarea'
-    ];
-
-    for (const selector of selectors) {
-        const el = document.querySelector(selector);
-        if (el) {
-            el.focus();
-
-            if (el.tagName === 'TEXTAREA') {
-                const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-                    window.HTMLTextAreaElement.prototype, 'value'
-                ).set;
-                nativeInputValueSetter.call(el, text);
-                el.dispatchEvent(new Event('input', { bubbles: true }));
-            } else {
-                el.innerHTML = '';
-                el.focus();
-                document.execCommand('insertText', false, text);
-
-                if (!el.textContent.trim()) {
-                    el.textContent = text;
-                    el.dispatchEvent(new InputEvent('input', { bubbles: true }));
-                }
-            }
-
-            flashBorder(el);
-            console.log('PromptPilot: Inserted into Gemini');
-            return true;
-        }
-    }
-
-    console.log('PromptPilot: Could not find Gemini input');
-    return false;
-}
-
-function insertIntoPerplexity(text) {
-    const selectors = [
-        'textarea[placeholder]',
-        'div[contenteditable="true"]',
-        'textarea'
-    ];
-
-    for (const selector of selectors) {
-        const el = document.querySelector(selector);
-        if (el) {
-            el.focus();
-
-            if (el.tagName === 'TEXTAREA') {
-                const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-                    window.HTMLTextAreaElement.prototype, 'value'
-                ).set;
-                nativeInputValueSetter.call(el, text);
-                el.dispatchEvent(new Event('input', { bubbles: true }));
-            } else {
-                el.innerHTML = '';
-                el.focus();
-                document.execCommand('insertText', false, text);
-            }
-
-            flashBorder(el);
-            console.log('PromptPilot: Inserted into Perplexity');
-            return true;
-        }
-    }
-
-    return false;
 }
 
 function flashBorder(el) {
     const original = el.style.outline;
     el.style.outline = '2px solid #10b981';
-    setTimeout(() => { el.style.outline = original; }, 1500);
+    el.style.transition = 'outline 0.3s ease';
+    setTimeout(() => {
+        el.style.outline = original;
+    }, 1500);
 }
+
+// ── Site-specific pre-processing ──────────────────────────────────────────────
+// Some sites need special handling before injection.
+// This is kept minimal — just navigation/preparation, not selector hunting.
+
+async function prepareSite() {
+    const host = window.location.hostname;
+
+    // For Grok — sometimes need to wait for hydration
+    if (host.includes('x.com') || host.includes('grok.com')) {
+        await wait(300);
+    }
+
+    // For Mistral — wait for editor to initialise
+    if (host.includes('mistral.ai') || host.includes('chat.mistral.ai')) {
+        await wait(300);
+    }
+}
+
+function wait(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// ── Main injection function ───────────────────────────────────────────────────
+
+async function insertPrompt(text) {
+    await prepareSite();
+
+    // Try to find the best input up to 3 times with short delays
+    // (some sites render the input after page load)
+    for (let attempt = 0; attempt < 3; attempt++) {
+        const el = findBestInput();
+
+        if (el) {
+            const success = insertIntoElement(el, text);
+            if (success) {
+                flashBorder(el);
+                console.log('PromptPilot: Prompt inserted successfully on attempt', attempt + 1);
+                return true;
+            }
+        }
+
+        // Wait before retrying
+        if (attempt < 2) {
+            await wait(500);
+        }
+    }
+
+    console.log('PromptPilot: Could not find a suitable input field');
+    return false;
+}
+
+// ── Message listener ──────────────────────────────────────────────────────────
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.type === 'insertPrompt') {
+        insertPrompt(message.prompt).then(success => {
+            sendResponse({ success });
+        });
+        return true; // Keep channel open for async response
+    }
+});

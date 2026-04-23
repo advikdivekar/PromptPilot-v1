@@ -1,7 +1,7 @@
 {
     "manifest_version": 3,
     "name": "PromptPilot",
-    "version": "0.0.2",
+    "version": "0.0.3",
     "description": "Receives engineered prompts from PromptPilot and pastes them into AI tools",
     "permissions": [
         "storage",
@@ -11,8 +11,6 @@
         "tabs"
     ],
     "host_permissions": [
-        "http://localhost:54321/*",
-        "ws://localhost:54321/*",
         "https://promptpilot-api.onrender.com/*",
         "wss://promptpilot-api.onrender.com/*"
     ],
@@ -24,9 +22,22 @@
             "matches": [
                 "https://claude.ai/*",
                 "https://chatgpt.com/*",
+                "https://chat.openai.com/*",
                 "https://gemini.google.com/*",
                 "https://www.perplexity.ai/*",
-                "https://chat.openai.com/*"
+                "https://perplexity.ai/*",
+                "https://mistral.ai/*",
+                "https://chat.mistral.ai/*",
+                "https://x.com/i/grok*",
+                "https://grok.com/*",
+                "https://grok.x.ai/*",
+                "https://www.phind.com/*",
+                "https://phind.com/*",
+                "https://you.com/*",
+                "https://huggingface.co/chat/*",
+                "https://poe.com/*",
+                "https://copilot.microsoft.com/*",
+                "https://bing.com/chat*"
             ],
             "js": [
                 "content.js"
